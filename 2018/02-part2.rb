@@ -1,0 +1,1 @@
+input.split("\n").map { |line| line.split(" ").map(&:to_i) }.map { |line| line.combination(2).to_a.map(&:sort).select { |a,b| b % a == 0 }.map { |a,b| b / a } }.flatten.sum
