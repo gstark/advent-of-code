@@ -1,0 +1,1 @@
+input.split("\n").map { |line| line.split(" ").map(&:to_i) }.map { |line| line.minmax }.map { |min, max| max - min }.sum
