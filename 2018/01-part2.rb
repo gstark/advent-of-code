@@ -1,0 +1,1 @@
+digits = input.digits; offset = digits.length / 2; lookup = digits.cycle(2).to_a; digits.map.with_index { |d, i| [d, lookup[i+offset]] }.select { |a,b| a==b }.sum { |a,b| a }
