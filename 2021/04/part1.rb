@@ -60,28 +60,22 @@ lines = STDIN.read.split("\n")
 numbers = lines[0].split(",").map(&:to_i)
 
 boards = lines[1..].each_slice(6).map { |board_lines| board_lines[1..].map { |board_line| board_line.split.map(&:to_i) } }.to_a
+board_count = boards.length
 
-# Loop through the numbers called and for each number:
-winning_number = numbers.find do |number|
-  # - Loop through each board, marking any instance of that number as "seen" (by replacing it with a 0)
-  boards.find do |board|
-    board.each do |row|
-      # Go through the column and change any instances of `number` to nil
-      row.map! { |column| column == number ? nil : column}
+results = Enumerator.new do |yielder|
+  loop do
+    numbers.each do |number|
+      new_winning_boards = boards.find_all do |board|
+        board.each { |row| row.map! { |column| column == number ? nil : column } }
+
+        board.any? { |row| row.all? { |column| column.nil? }} || board.transpose.any? { |row| row.all? { |column| column.nil? }}
+      end
+
+      boards -= new_winning_boards
+      yielder << { boards: boards, new_winning_boards: new_winning_boards, number: number }
     end
-
-    # Check if there is a winning state
-    # - Check if any row is all nil
-    # - Check if any column is all nil
-    board.any? { |row| row.all? { |column| column.nil? }} ||
-    board.transpose.any? { |row| row.all? { |column| column.nil? }}
   end
 end
 
-# - Calculation is the sum of all the elements multiplied by the current called number
-winning_board = boards.find { |board| 
-  board.any? { |row| row.all? { |column| column.nil? }} ||
-  board.transpose.any? { |row| row.all? { |column| column.nil? }}
-}
-
-ap winning_number * winning_board.flatten.compact.sum
+result = results.find { |result| result[:new_winning_boards].any? }
+ap result[:new_winning_boards].flatten.compact.sum * result[:number]

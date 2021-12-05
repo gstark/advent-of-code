@@ -60,36 +60,23 @@ lines = STDIN.read.split("\n")
 numbers = lines[0].split(",").map(&:to_i)
 
 boards = lines[1..].each_slice(6).map { |board_lines| board_lines[1..].map { |board_line| board_line.split.map(&:to_i) } }.to_a
+board_count = boards.length
 
-# Turn each called number into an array of:
-# An array, for each board containing:
-#   [
-#     true/false if this is a bingo
-#     number just called
-#     the board's sum
-#   ]
-results = numbers.map do |number|
-  # Turn the boards into an array of arrays
-  boards.map do |board|
-    board.each do |row|
-      row.map! { |column| column == number ? nil : column}
+results = Enumerator.new do |yielder|
+  loop do
+    numbers.each do |number|
+      new_winning_boards = boards.find_all do |board|
+        board.each { |row| row.map! { |column| column == number ? nil : column } }
+
+        board.any? { |row| row.all? { |column| column.nil? }} || board.transpose.any? { |row| row.all? { |column| column.nil? }}
+      end
+
+      boards -= new_winning_boards
+
+      yielder << { boards: boards, new_winning_boards: new_winning_boards, number: number }
     end
-
-    # The array is the true/false, the called number, the board's sum
-    [
-      board.any? { |row| row.all? { |column| column.nil? }} || board.transpose.any? { |row| row.all? { |column| column.nil? }},
-      number,
-      board.flatten.compact.sum
-    ]
   end
 end
 
-# Find the first time ALL the boards are bingos!
-result_index = results.find_index { |result| result.all? { |result| result[0] == true }}
-
-# Look at the results, *just* before this one and find the board that was false. This is the last board to be bingo
-board_index_that_just_became_true = results[result_index-1].find_index { |result| result[0] == false }
-
-# Figure out it's score
-ap results[result_index][board_index_that_just_became_true][1] * results[result_index][board_index_that_just_became_true][2] 
-
+result = results.find { |result| result[:boards].empty? && result[:new_winning_boards].any? }
+ap result[:new_winning_boards].flatten.compact.sum * result[:number]
