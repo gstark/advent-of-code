@@ -45,16 +45,13 @@ filtered_lines = lines.select { |(x1,y1), (x2,y2)| x1 == x2 || y1 == y2 }
 hash = {}
 # Loop through our filtered lines
 filtered_lines.each do |(x1,y1),(x2,y2)|
-  # For each line
-  #   loop through each position in that line
-  if x1 == x2
-    y_range = [y1,y2].min .. [y1,y2].max
+  case
+  when x1 == x2
+    y_range = (y1..y2).step(y1 > y2 ? -1 : 1)
     x_range = [x1] * y_range.count
 
-  end
-
-  if y1 == y2
-    x_range = [x1,x2].min .. [x1,x2].max
+  when y1 == y2
+    x_range = (x1..x2).step(x1 > x2 ? -1 : 1)
     y_range = [y1] * x_range.count
   end
 
