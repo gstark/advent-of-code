@@ -60,20 +60,31 @@ lines = STDIN.read.split("\n")
 numbers = lines[0].split(",").map(&:to_i)
 
 boards = lines[1..].each_slice(6).map { |board_lines| board_lines[1..].map { |board_line| board_line.split.map(&:to_i) } }.to_a
-board_count = boards.length
 
+def winning_board(board)
+  board.any? { |row| row.all? { |column| column.nil? } } || board.transpose.any? { |row| row.all? { |column| column.nil? } } 
+end
+
+# Want this enumerator to *yield* / *produce* some data for EACH number called
+#
+# What we are going produce is a hash
+#   boards: all of the boards that are remaining (e.g. NON BINGO)
+#   new_winning_boards: any boards that *JUST* became bingo on this number
+#   number: The number called
 results = Enumerator.new do |yielder|
-  loop do
-    numbers.each do |number|
-      new_winning_boards = boards.find_all do |board|
-        board.each { |row| row.map! { |column| column == number ? nil : column } }
+  # Walk through each number
+  numbers.each do |number|
+    # Compute an array of any new winning boards
+    new_winning_boards = boards.select { |board| winning_board(board.each { |row| row.map! { |column| column == number ? nil : column } }) }
 
-        board.any? { |row| row.all? { |column| column.nil? }} || board.transpose.any? { |row| row.all? { |column| column.nil? }}
-      end
+    # Remove any of those boards from the array
+    boards -= new_winning_boards
 
-      boards -= new_winning_boards
-      yielder << { boards: boards, new_winning_boards: new_winning_boards, number: number }
-    end
+    yielder << {
+                 boards: boards,
+                 new_winning_boards: new_winning_boards,
+                 number: number
+               }
   end
 end
 
