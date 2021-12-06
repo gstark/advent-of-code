@@ -35,24 +35,19 @@ filtered_lines.each do |(x1,y1),(x2,y2)|
   #   loop through each position in that line
   case
   when x1 == x2
-    y_range = [y1,y2].min .. [y1,y2].max
+    y_range = (y1..y2).step(y1 > y2 ? -1 : 1)
     x_range = [x1] * y_range.count
 
   when y1 == y2
-    x_range = [x1,x2].min .. [x1,x2].max
+    x_range = (x1..x2).step(x1 > x2 ? -1 : 1)
     y_range = [y1] * x_range.count
 
   else # x1 != x2 && y1 != y2
-    x_range = [x1,x2].min .. [x1,x2].max
-    y_range = [y1,y2].min .. [y1,y2].max
-
-    if x1 < x2
-      x_range = x_range.to_a.reverse
-    end
-
-    if y1 < y2
-      y_range = y_range.to_a.reverse
-    end
+    # Gets around Ruby's insistance that ranges are always low..high
+    #
+    # BUT we can use a negative step.
+    x_range = (x1..x2).step(x1 > x2 ? -1 : 1)
+    y_range = (y1..y2).step(y1 > y2 ? -1 : 1)
   end
 
   x_range.zip(y_range).each do |position|
