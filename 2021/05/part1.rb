@@ -48,35 +48,18 @@ filtered_lines.each do |(x1,y1),(x2,y2)|
   # For each line
   #   loop through each position in that line
   if x1 == x2
-    range = y1 < y2 ? (y1..y2) : (y2..y1)
+    y_range = [y1,y2].min .. [y1,y2].max
+    x_range = [x1] * y_range.count
 
-    range.each do |y|
-      position = [x1,y]
-
-      #   - If that position isn't in our hash, then add it to the hash with a count of 0
-      if !hash.include?(position)
-        hash[position] = 0
-      end
-
-      #   - Increment the value at the position in the hash
-      hash[position] += 1
-    end
   end
 
   if y1 == y2
-    range = x1 < x2 ? (x1..x2) : (x2..x1)
+    x_range = [x1,x2].min .. [x1,x2].max
+    y_range = [y1] * x_range.count
+  end
 
-    range.each do |x|
-      position = [x, y1]
-
-      #   - If that position isn't in our hash, then add it to the hash with a count of 0
-      if !hash.include?(position)
-        hash[position] = 0
-      end
-
-      #   - Increment the value at the position in the hash
-      hash[position] += 1
-    end
+  x_range.zip(y_range).each do |position|
+    hash[position] = (hash[position] || 0) + 1 
   end
 end
 
