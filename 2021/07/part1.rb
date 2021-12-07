@@ -16,5 +16,5 @@ positions = $stdin.read.split(",").map(&:to_i)
 # 2  - 1 = 1
 # ...
 
-fuel_total = positions.map { |to| positions.sum { |from| (from - to).abs } }.min
+fuel_total = (positions.min..positions.max).map { |to| positions.sum { |from| (from - to).abs } }.min
 ap fuel_total
