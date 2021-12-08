@@ -10,10 +10,13 @@ fishies = $stdin.read.split(",").map(&:to_i).tally
 # Take the number of 8s and make that the number of 7s
 # Make the initial number of 0s the number of 8s
 
-256.times do |index|
-  count_of_zeros = fishies.delete(0) || 0
+# Fill in other hash indexes with 0s.
+fishies = (0..8).map { |index| [index, 0] }.to_h.merge(fishies)
 
-  fishies[7] = (fishies[7] || 0) + count_of_zeros
+256.times do |index|
+  count_of_zeros = fishies.delete(0)
+
+  fishies[7] = fishies[7] + count_of_zeros
 
   (1..8).each do |timer|
     fishies[timer-1] = fishies[timer]
