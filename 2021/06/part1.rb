@@ -3,7 +3,7 @@ require 'awesome_print'
 fishies = $stdin.read.split(",").map(&:to_i)
 
 # Count the number of 0s
-256.times do |day|
+80.times do |day|
   zero_fish = fishies.count(0)
   # For each fish in our list
   fishies.map! do |fish|
