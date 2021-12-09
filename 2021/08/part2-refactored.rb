@@ -36,10 +36,10 @@ ap $stdin.read.split("\n").sum { |input|
     "a" => (counts.select { |k,v| v == 8 }.keys - characters_in_the_four).first,
     # Things counted 8 times are either an "a" or a "c", so figure out which one *IS* in the 4, that is the "c"
     "c" => (counts.select { |k,v| v == 8 }.keys & characters_in_the_four).first,
-    
-    # Things coutned 7 times are either "d" or "g", so figure out which one *IS* in the 4, that is the "g"
+
+    # Things counted 7 times are either "d" or "g", so figure out which one *IS* in the 4, that is the "g"
     "d" => (counts.select { |k,v| v == 7 }.keys & characters_in_the_four).first,
-    # Things coutned 7 times are either "d" or "g", so figure out which one *ISN'T* in the 4, that is the "g"
+    # Things counted 7 times are either "d" or "g", so figure out which one *ISN'T* in the 4, that is the "g"
     "g" => (counts.select { |k,v| v == 7 }.keys - characters_in_the_four).first,
   }.invert
 
