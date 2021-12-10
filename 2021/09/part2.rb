@@ -24,19 +24,17 @@ def basin_size(row, col, heights, visited = Set.new)
       basin_size(row+0, col+1, heights, visited)
 end
 
-low_points = heights.
+ap heights.
     select { |(row, col), height|
-              [
-                heights[[row-1, col+0]],
-                heights[[row+1, col+0]],
+      [
+        heights[[row-1, col+0]],
+        heights[[row+1, col+0]],
 
-                heights[[row+0, col-1]],
-                heights[[row+0, col+1]],
-              ].compact.all? { |neighbor| neighbor > height }
-            }
-
-ap low_points.
-     map { |(row, col), height| basin_size(row, col, heights) }.
-     sort.
-     last(3).
-     reduce(:*)
+        heights[[row+0, col-1]],
+        heights[[row+0, col+1]],
+      ].compact.all? { |neighbor| neighbor > height }
+    }.
+    map { |(row, col), height| basin_size(row, col, heights) }.
+    sort.
+    last(3).
+    reduce(:*)
