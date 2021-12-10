@@ -35,6 +35,5 @@ ap heights.
       ].compact.all? { |neighbor| neighbor > height }
     }.
     map { |(row, col), height| basin_size(row, col, heights) }.
-    sort.
-    last(3).
+    max(3).
     reduce(:*)
