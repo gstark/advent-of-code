@@ -7,18 +7,16 @@ CLOSES = ")}>]".chars
 POINTS = { ")" => 3, "]" => 57, "}" => 1197, ">" => 25137 }
 
 ap lines.map { |line|
-     line.reduce({stack: [], illegal: nil}) { |result, character|
+     line.each.with_object({stack: [], illegal: nil}) { |character, result|
        break result if result[:illegal]
 
-       if CLOSES.include?(character) && CLOSES.index(character) == OPENS.index(result[:stack].last)
-         result[:stack].pop
-       elsif CLOSES.include?(character) && CLOSES.index(character) != OPENS.index(result[:stack].last)
-         result[:illegal] = character
-       else
+       if OPENS.include?(character)
          result[:stack] << character
+       elsif CLOSES.index(character) == OPENS.index(result[:stack].last)
+         result[:stack].pop
+       else
+         result[:illegal] = character
        end
-
-       result
      }[:illegal]
    }
    .compact
