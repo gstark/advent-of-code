@@ -2,17 +2,27 @@ require 'awesome_print'
 
 lines = $stdin.read.split("\n").map(&:chars)
 
-OPENS =  "({<[".chars
-CLOSES = ")}>]".chars
-POINTS = { ")" => 3, "]" => 57, "}" => 1197, ">" => 25137 }
+PAIRS = {
+  "(" => ")",
+  "{" => "}",
+  "<" => ">",
+  "[" => "]"
+}
+
+POINTS = {
+  ")" => 3,
+  "]" => 57,
+  "}" => 1197,
+  ">" => 25137
+}
 
 ap lines.map { |line|
      line.each.with_object({stack: [], illegal: nil}) { |character, result|
        break result if result[:illegal]
 
-       if OPENS.include?(character)
+       if PAIRS[character]
          result[:stack].push(character)
-       elsif CLOSES.index(character) == OPENS.index(result[:stack].last)
+       elsif PAIRS[result[:stack].last] == character
          result[:stack].pop
        else
          result[:illegal] = character
