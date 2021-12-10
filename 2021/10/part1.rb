@@ -11,14 +11,15 @@ ap lines.map { |line|
        break result if result[:illegal]
 
        if OPENS.include?(character)
-         result[:stack] << character
+         result[:stack].push(character)
        elsif CLOSES.index(character) == OPENS.index(result[:stack].last)
          result[:stack].pop
        else
          result[:illegal] = character
        end
-     }[:illegal]
+     }
    }
-   .compact
+   .select { |result| result[:illegal] }
+   .map { |result| result[:illegal] }
    .map(&POINTS)
    .sum

@@ -18,9 +18,9 @@ ap lines.map { |line|
          result[:illegal] = character
        end
      }
-    }
-    .reject { |result| result[:illegal] }
-    .map { |result| result[:stack].reverse.map { |character| CLOSES[OPENS.index(character)] } }
-    .map { |line| line.reduce(0) { |total, character| total = total * 5 + POINTS[character] } }
-    .sort
-    .yield_self { |list| list[list.length/2] }
+   }
+   .reject { |result| result[:illegal] }
+   .map { |result| result[:stack].reverse.map { |character| CLOSES[OPENS.index(character)] } }
+   .map { |line| line.reduce(0) { |total, character| total = total * 5 + POINTS[character] } }
+   .sort
+   .yield_self { |list| list[list.length/2] }
