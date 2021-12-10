@@ -18,9 +18,9 @@ POINTS = {
 
 ap lines.map { |line|
      line.each.with_object({stack: [], illegal: nil}) { |character, result|
-       break result if result[:illegal]
-
-       if PAIRS[character]
+       if result[:illegal]
+         # Nothing
+       elsif PAIRS[character]
          result[:stack].push(character)
        elsif PAIRS[result[:stack].last] == character
          result[:stack].pop
