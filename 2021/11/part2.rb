@@ -29,17 +29,18 @@ step_enumerator = Enumerator.new do |yielder|
     # Increase everyone's level
     next_octo.transform_values!(&:succ)
 
-    # Keep track of who has flashed already
-    already_flashed = []
+    # Keep track of the octo's not yet flashed
+    not_yet_flashed = next_octo.keys
 
     loop do
-      # Get the keys of the elements with levels more then 9 then remove any that have already flashed this round
-      new_flashers = next_octo
-                      .select { |(r,c), level| level > 9 }
-                      .keys - already_flashed
+      # The new flashers are those that have not yet flashed this round who are now over level 9
+      new_flashers = not_yet_flashed.select { |r,c| next_octo[[r,c]] > 9 }
 
       # Stop processing this step if there aren't any new flashers
       break if new_flashers.empty?
+
+      # Remove these from the not yet flashed collection
+      not_yet_flashed -= new_flashers
 
       # Increment all the levels of the neighbors if they exist
       new_flashers.each do |r,c|
@@ -57,8 +58,7 @@ step_enumerator = Enumerator.new do |yielder|
         ].each { |r,c| next_octo[[r,c]] +=1 if octo[[r,c]] }
       end
 
-      # Keep track of the new flashers
-      already_flashed.concat(new_flashers)
+      # Increment the total flashes
       total_flashes += new_flashers.length
     end
 
