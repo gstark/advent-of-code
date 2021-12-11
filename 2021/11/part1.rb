@@ -1,5 +1,4 @@
 require 'awesome_print'
-require 'set'
 
 # Turn the input into a hash of (r,c) => energy level
 octo = $stdin
@@ -14,6 +13,19 @@ octo = $stdin
 def show_map(octo)
   puts octo.reduce([]) { |map, ((r,c), level)| (map[r] ||= [])[c] = level; map }.map { |row| row.join }.join("\n")
 end
+
+NEIGHBORS = [
+  [-1,-1],  # Above left
+  [-1,+0],  # Above
+  [-1,+1],  # Above right
+
+  [+0,-1],  # Left
+  [+0,+1],  # Right
+
+  [+1,-1],  # Below left
+  [+1,+0],  # Below
+  [+1,+1],  # Below right
+]
 
 # This enumerator yields a hash of
 # {
@@ -43,20 +55,7 @@ step_enumerator = Enumerator.new do |yielder|
       not_yet_flashed -= new_flashers
 
       # Increment all the levels of the neighbors if they exist
-      new_flashers.each do |r,c|
-        [
-          [r-1,c-1],  # Above left
-          [r-1,c+0],  # Above
-          [r-1,c+1],  # Above right
-
-          [r+0,c-1],  # Left
-          [r+0,c+1],  # Right
-
-          [r+1,c-1],  # Below left
-          [r+1,c+0],  # Below
-          [r+1,c+1],  # Below right
-        ].each { |r,c| next_octo[[r,c]] +=1 if octo[[r,c]] }
-      end
+      new_flashers.each { |r,c| NEIGHBORS.each { |delta_r, delta_c| next_octo[[r + delta_r, c + delta_c]] +=1 if octo[[r + delta_r, c + delta_c]] } }
 
       # Increment the total flashes
       total_flashes += new_flashers.length
