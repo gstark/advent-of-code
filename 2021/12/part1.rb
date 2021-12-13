@@ -21,7 +21,7 @@ def count_paths(paths, location, visited = [])
       count_paths(paths, hop, [*visited])
     # We can revisit any lower case spot we haven't seen
     when visited.count(hop) == 0
-      count_paths(paths, hop, [*visited].concat([hop]))
+      count_paths(paths, hop, [*visited, hop])
     # Otherwise this is the end of the road...
     else
       0
