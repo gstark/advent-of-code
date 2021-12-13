@@ -10,8 +10,8 @@ paths = $stdin
           .flatten(1)
           # And remove anything that takes us back to the start
           .reject { |from, to| to == "start"}
-          # And turn this into a lookup map
-          .each.with_object({}) { |(from,to),hash| (hash[from] ||= []) << to }
+          # And turn this into a lookup map. We start with a hash with a default lookup proc
+          .each.with_object(Hash.new { |hash,key| hash[key] = [] }) { |(from,to),hash| hash[from] << to }
 
 def count_paths(paths, location, visited = [])
   paths[location].sum { |hop|
