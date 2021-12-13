@@ -15,10 +15,8 @@ end
 dots = []
 folds = []
 $stdin.readlines.each do |line|
-  case
-  when line =~ /(\d+),(\d+)/  then dots << make_dot($1.to_i, $2.to_i)
-  when line =~ /([xy])=(\d+)/ then folds << [$1, $2.to_i]
-  end
+  dots << make_dot($1.to_i, $2.to_i) if line =~ /(\d+),(\d+)/  
+  folds << [$1, $2.to_i] if line =~ /([xy])=(\d+)/
 end
 
 folds.each do |direction, offset|
