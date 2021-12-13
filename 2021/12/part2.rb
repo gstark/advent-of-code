@@ -1,5 +1,7 @@
 require 'awesome_print'
 
+# This gives us a hash where the keys are the locations and the values is
+# an array of locations we can travel from that location
 paths = $stdin
           .read
           .split("\n")
