@@ -6,10 +6,18 @@ def make_dot(x,y)
 end
 
 def print_dots(dots)
-  max_x = dots.map { |dot| dot[:x] }.max
-  max_y = dots.map { |dot| dot[:y] }.max
+  max_x = dots.map { |dot| dot[:x] }.max + 1
+  max_y = dots.map { |dot| dot[:y] }.max + 1
 
-  puts (0..max_y).map { |y| (0..max_x).map { |x| dots.include?(make_dot(x, y)) ? "#" : "." }.join }
+  # Make a field of dots
+  field = ("." * max_x * max_y).chars.each_slice(max_x).map(&:join)
+
+  # Mark anything that is in our dots
+  dots.each do |dot|
+    field[dot.y][dot.x] = "#"
+  end
+
+  puts field
 end
 
 dots = []
