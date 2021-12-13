@@ -11,11 +11,11 @@ paths = $stdin
           }
 
 def count_paths(paths, location, visited = [])
-  # We found an end, count it
-  return 1 if location == "end"
-
   paths.fetch(location, []).sum { |hop|
     case
+    # This is a hop to the end, so count it as 1
+    when hop == "end"
+      1
     # Can always revisit uppercase locations
     when hop.upcase == hop
       count_paths(paths, hop, [*visited])
