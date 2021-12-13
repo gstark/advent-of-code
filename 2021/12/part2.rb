@@ -11,7 +11,7 @@ paths = $stdin
           }
 
 def count_paths(paths, location, visited = [])
-  paths.fetch(location, []).sum { |hop|
+  paths[location].sum { |hop|
     case
     # This is a hop to the end, so count it as 1
     when hop == "end"
