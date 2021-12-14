@@ -23,10 +23,9 @@ pairs = lines.each.with_object({}) { |line, object| object.merge!(line.scan(/(\w
 
 template_pair_counts = template.each_cons(2).tally
 
-char_counts = nil
 new_pair_counts = nil
+
 40.times do
-  char_counts = Hash.new { |k,v| 0}
   new_pair_counts = Hash.new { |k,v| 0 }
 
   template_pair_counts.each do |(left,right), count|
@@ -34,15 +33,28 @@ new_pair_counts = nil
 
     new_pair_counts[[left,lookup]] += count
     new_pair_counts[[lookup,right]] += count
-
-    char_counts[left] += count
-    char_counts[lookup] += count
   end
-
-  char_counts[template.last] += 1
 
   template_pair_counts = new_pair_counts
 end
 
-ap char_counts.values.minmax.reverse.reduce(&:-)
+# We want to sum the counts when a letter is
+# in the first part of our pairs
+p template_pair_counts
+    # Turn the template pair into a first leter and count
+    .map { |(f,s), c| [f,c] }
+    # Group by the first letter
+    .group_by(&:first)
+    # Sum up the counts
+    .map { |letter, counts| [letter, counts.map(&:last).sum] }
+    # Add one if the letter is the last letter in the original template
+    .map { |letter, count| [letter, count + (letter == template.last ? 1 : 0) ]}
+    # Take the counts
+    .map(&:last)
+    # Get the min and the max
+    .minmax
+    # Reverse them
+    .reverse
+    # and subtract them
+    .reduce(:-)
 
