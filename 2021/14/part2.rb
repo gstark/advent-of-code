@@ -24,22 +24,25 @@ pairs = lines
          .with_object({}) { |line, object| object.merge!(line.scan(/(\w\w) -> (\w)/).to_h) }
 
 def enumerator_for_template(pairs, template)
-  pair_counts = template.each_cons(2).tally
+  # Start with a tally of pair counts
+  new_pair_counts = template.each_cons(2).tally
 
   Enumerator.new do |yielder|
     loop do
-      new_pair_counts = Hash.new { |k,v| 0 }
-
-      pair_counts.each do |(left,right), count|
+      # The new pair counts can be computed by
+      # going through all of the existing pair counts
+      # and adding 1 for the [left, lookup] pair
+      # and adding 1 for the [lookup, right] pair
+      # for every count of the orinal pair
+      new_pair_counts = new_pair_counts.each.with_object(Hash.new {0} ) do |((left,right), count), new_pair_counts|
         lookup = pairs[left + right]
 
         new_pair_counts[[left,lookup]] += count
         new_pair_counts[[lookup,right]] += count
       end
 
+      # Yield the new_pair_counts to the enumerator
       yielder << new_pair_counts
-
-      pair_counts = new_pair_counts
     end
   end
 end
@@ -51,17 +54,17 @@ ap enumerator_for_template(pairs, template)
     .take(40)
     # Consider the last
     .last
-    # # Group the information by first letter
-    # .group_by { |(first_letter, second_letter), count| first_letter }
-    # # For each first letter, we sum up the counts, which are now the last element in the grouping
-    # .map { |first_letter, counts| [first_letter, counts.sum(&:last)] }
-    # # Add one if the letter is the last letter in the original template
-    # .map { |letter, count| [letter, count + (letter == template.last ? 1 : 0) ]}
-    # # Take the counts
-    # .map(&:last)
-    # # Get the min and the max
-    # .minmax
-    # # Reverse them
-    # .reverse
-    # # and subtract them
-    # .reduce(:-)
+    # Go through each
+    .each
+    # For each letter/count pair, increment the count for that letter (using hash with a default value of 0)
+    .with_object(Hash.new { 0 }) { |((first_letter,_), count), sums| sums[first_letter] += count }
+    # Then add one if the letter is the last letter in the original template
+    .map { |letter, count| [letter, count + (letter == template.last ? 1 : 0) ]}
+    # Take the counts
+    .map(&:last)
+    # Get the min and the max
+    .minmax
+    # Reverse them
+    .reverse
+    # and subtract them
+    .reduce(:-)
