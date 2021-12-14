@@ -64,7 +64,5 @@ ap enumerator_for_template(pairs, template)
     .map(&:last)
     # Get the min and the max
     .minmax
-    # Reverse them
-    .reverse
-    # and subtract them
-    .reduce(:-)
+    # Subtract the min from the max
+    .yield_self { |min, max| max - min}
