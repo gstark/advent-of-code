@@ -19,30 +19,40 @@ lines.shift
 #   "CB" => "H",
 #   ...
 # }
-pairs = lines.each.with_object({}) { |line, object| object.merge!(line.scan(/(\w\w) -> (\w)/).to_h) }
+pairs = lines
+         .each
+         .with_object({}) { |line, object| object.merge!(line.scan(/(\w\w) -> (\w)/).to_h) }
 
-template_pair_counts = template.each_cons(2).tally
+def enumerator_for_template(pairs, template)
+  pair_counts = template.each_cons(2).tally
 
-new_pair_counts = nil
+  Enumerator.new do |yielder|
+    loop do
+      new_pair_counts = Hash.new { |k,v| 0 }
 
-40.times do
-  new_pair_counts = Hash.new { |k,v| 0 }
+      pair_counts.each do |(left,right), count|
+        lookup = pairs[left + right]
 
-  template_pair_counts.each do |(left,right), count|
-    lookup = pairs[left + right]
+        new_pair_counts[[left,lookup]] += count
+        new_pair_counts[[lookup,right]] += count
+      end
 
-    new_pair_counts[[left,lookup]] += count
-    new_pair_counts[[lookup,right]] += count
+      yielder << new_pair_counts
+
+      pair_counts = new_pair_counts
+    end
   end
-
-  template_pair_counts = new_pair_counts
 end
 
 # We want to sum the counts when a letter is
 # in the first part of our pairs
-p template_pair_counts
+ap enumerator_for_template(pairs, template)
+    # Run 40 iterations
+    .take(40)
+    # Consider the last
+    .last
     # Turn the template pair into a first leter and count
-    .map { |(f,s), c| [f,c] }
+    .map { |(first_letter,second_letter), count| [first_letter,count] }
     # Group by the first letter
     .group_by(&:first)
     # Sum up the counts
@@ -57,4 +67,3 @@ p template_pair_counts
     .reverse
     # and subtract them
     .reduce(:-)
-
