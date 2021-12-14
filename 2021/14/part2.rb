@@ -51,19 +51,17 @@ ap enumerator_for_template(pairs, template)
     .take(40)
     # Consider the last
     .last
-    # Turn the template pair into a first leter and count
-    .map { |(first_letter,second_letter), count| [first_letter,count] }
-    # Group by the first letter
-    .group_by(&:first)
-    # Sum up the counts
-    .map { |letter, counts| [letter, counts.map(&:last).sum] }
-    # Add one if the letter is the last letter in the original template
-    .map { |letter, count| [letter, count + (letter == template.last ? 1 : 0) ]}
-    # Take the counts
-    .map(&:last)
-    # Get the min and the max
-    .minmax
-    # Reverse them
-    .reverse
-    # and subtract them
-    .reduce(:-)
+    # # Group the information by first letter
+    # .group_by { |(first_letter, second_letter), count| first_letter }
+    # # For each first letter, we sum up the counts, which are now the last element in the grouping
+    # .map { |first_letter, counts| [first_letter, counts.sum(&:last)] }
+    # # Add one if the letter is the last letter in the original template
+    # .map { |letter, count| [letter, count + (letter == template.last ? 1 : 0) ]}
+    # # Take the counts
+    # .map(&:last)
+    # # Get the min and the max
+    # .minmax
+    # # Reverse them
+    # .reverse
+    # # and subtract them
+    # .reduce(:-)
