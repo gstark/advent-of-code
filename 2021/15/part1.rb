@@ -47,7 +47,7 @@ def a_star(start:, goal:, neighbors:, heuristic:, weight:)
         f_score[neighbor] = tentative_g_score + neighbor_heuristic
 
         # Add the neighbor and it's cost
-        open_set << [neighbor, neighbor_heuristic] unless open_set.include?([neighbor, neighbor_heuristic])
+        open_set << [neighbor, neighbor_heuristic]
       end
     end
   end
