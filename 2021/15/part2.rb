@@ -5,7 +5,7 @@ require 'pqueue'
 
 map = $stdin.readlines.map { |line| line.chars.map(&:to_i) }
 map_length = map.length
-full_map_length = map.length
+full_map_length = map.length * 5
 
 # The following two methods is the A* algorithm from Wikipedia: https://en.wikipedia.org/wiki/A*_search_algorithm
 #
