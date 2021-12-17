@@ -9,6 +9,9 @@ input = $stdin.readlines(chomp: true).first
 #                              # this packet has a version sum of 16.
 # input = "A0016C880162017C3686B18A3D4780" # => version sum 31
 
+# input = "C200B40A82" # finds the sum of 1 and 2, resulting in the value 3.
+# input = "9C0141080250320F1802104A08" # produces 1, because 1 + 3 = 2 * 2.
+
 def parse_packet(input)
   input = input.dup
 
@@ -32,6 +35,8 @@ def parse_packet(input)
 
     number = number.join.to_i(2)
   else
+    numbers = []
+
     case input.shift
     when '0'
       sub_packet_bit_length = input.shift(15).join.to_i(2)
@@ -39,6 +44,7 @@ def parse_packet(input)
       while sub_packet_bit_length > 0
         results = parse_packet(input)
 
+        numbers << results[:number]
         input = results[:input]
         version_sum += results[:version_sum]
         sub_packet_bit_length -= results[:bits_read]
@@ -49,10 +55,21 @@ def parse_packet(input)
       sub_packet_count.times do
         results = parse_packet(input)
 
+        numbers << results[:number]
         input = results[:input]
         version_sum += results[:version_sum]
       end
     end
+
+    number = case type
+             when 0 then numbers.sum
+             when 1 then numbers.reduce(:*)
+             when 2 then numbers.min
+             when 3 then numbers.max
+             when 5 then numbers.first > numbers.last ? 1 : 0
+             when 6 then numbers.first < numbers.last ? 1 : 0
+             when 7 then numbers.first == numbers.last ? 1 : 0
+             end
   end
 
   { input: input, version: version, type: type, number: number, bits_read: origin_length - input.length, version_sum: version_sum }
