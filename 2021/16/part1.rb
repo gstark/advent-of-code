@@ -13,13 +13,11 @@ def parse_packet(input)
   input = input.dup
 
   origin_length = input.length
-  version = input.shift(3).join.to_i(2)
+
+  version_sum = input.shift(3).join.to_i(2)
   type = input.shift(3).join.to_i(2)
 
-  version_sum = version
-
-  case type
-  when 4
+  if type == 4
     number = []
 
     loop do
@@ -39,7 +37,7 @@ def parse_packet(input)
       while sub_packet_bit_length > 0
         results = parse_packet(input)
 
-        input = results[:input]
+        input.shift(results[:bits_read])
         version_sum += results[:version_sum]
         sub_packet_bit_length -= results[:bits_read]
       end
@@ -49,14 +47,14 @@ def parse_packet(input)
       sub_packet_count.times do
         results = parse_packet(input)
 
-        input = results[:input]
+        input.shift(results[:bits_read])
         version_sum += results[:version_sum]
       end
     end
   end
 
-  { input: input, version: version, type: type, number: number, bits_read: origin_length - input.length, version_sum: version_sum }
+  { number: number, bits_read: origin_length - input.length, version_sum: version_sum }
 end
 
-input = input.chars.map { |digit| digit.to_i(16).to_s(2).rjust(4, '0') }.join.chars
+input = input.chars.map { |digit| digit.to_i(16).to_s(2).rjust(4, '0') }.join.chars.freeze
 ap parse_packet(input)
