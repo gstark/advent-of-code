@@ -1,7 +1,7 @@
 # x=150..193, y=-136..-86   input
 # x=20..30, y=-10..-5       sample
 
-target_x = (150..192)    # input
+target_x = (150..193)    # input
 target_y = (-136..-86)   # input
 
 # target_x = (20..30)      # sample
@@ -37,10 +37,10 @@ max_y = velocities.map do |(ivx,ivy)|
     vy -= 1
 
     # Stop if we have gone too far
-    break false if x > target_x.last
+    break false if x > target_x.last || y < target_y.first
 
     # Stop if we are in the landing zone
-    break true if target_x.include?(x) && target_y.include?(y)
+    break true if target_x.cover?(x) && target_y.cover?(y)
   end
 
   [found, ivx, ivy, max_y]
