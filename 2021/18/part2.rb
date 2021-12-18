@@ -1,3 +1,5 @@
+require 'json'
+
 class Node
   attr_reader :left
   attr_reader :right
@@ -118,8 +120,8 @@ end
 inputs = $stdin.readlines(chomp: true)
 
 p inputs.combination(2).reduce(0) { |max, (a,b)|
-  a = eval(a)
-  b = eval(b)
+  a = JSON.parse(a)
+  b = JSON.parse(b)
 
   [max, add(parse(a),parse(b)).magnitude, add(parse(b),parse(a)).magnitude].max
 }
