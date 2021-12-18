@@ -1,3 +1,5 @@
+require 'json'
+
 class Node
   attr_reader :left
   attr_reader :right
@@ -119,4 +121,4 @@ inputs = $stdin.readlines(chomp: true)
 
 root = parse(eval(inputs.shift))
 
-p inputs.reduce(root) { |root, input| add(root, parse(eval(input))) }.magnitude
+p inputs.reduce(root) { |root, input| add(root, parse(JSON.parse(input))) }.magnitude
