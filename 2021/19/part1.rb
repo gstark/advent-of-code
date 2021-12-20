@@ -1,7 +1,7 @@
 require 'awesome_print'
 require 'set'
 
-data = { }
+beacons = { }
 
 section = nil
 
@@ -9,13 +9,13 @@ $stdin.readlines.each do |line|
   case line
   when /--- scanner (\d+) ---/
   section = $1.to_i
-  data[section] = []
+  beacons[section] = []
   when /(-?\d+),(-?\d+),(-?\d+)/
-  data[section] << [$1.to_i, $2.to_i, $3.to_i]
+  beacons[section] << [$1.to_i, $2.to_i, $3.to_i]
   end 
 end
 
-sections = data.keys
+sections = beacons.keys
 
 def add(point0, point1)
   [
@@ -92,38 +92,45 @@ ROTATIONS = [
 
 scanner_locations = {0 => [0,0,0]}
 
-to_scan = [0]
+# We know about scanner 0, we'll assume that it is at 0,0,0
+freshly_located_scanners = [0]
 
 loop do
-  break if to_scan.empty?
+  # If we found all the scanners, stop
+  break if scanner_locations.keys.size == sections.size
 
-  known_locations = to_scan.dup
-  unknown_locations = sections - known_locations
+  # Look around at all the unknown scanners
+  unknown_scanners = sections - scanner_locations.keys
 
-  to_scan = []
+  # Make a list of the scanners to test next time
+  next_scan = []
 
-  puts "Scanning #{known_locations.inspect} - I know about #{scanner_locations.size} scanners"
-  known_locations.each do |scanner_a|
-    unknown_locations.each do |scanner_b|
-      print "."
-      data[scanner_a].each.with_index do |pointa, indexa|
-        break if scanner_locations[scanner_b]
+  puts "Scanning #{freshly_located_scanners.inspect} - I know about #{scanner_locations.size} scanners"
 
-        ROTATIONS.each.with_index do |rotation, index|
-          break if scanner_locations[scanner_b]
+  unknown_scanners.each do |unknown_scanner|
+    print "."
+    freshly_located_scanners.each do |known_scanner|
+      break if scanner_locations[unknown_scanner]
 
-          rotated_data_b = data[scanner_b].map(&rotation)
+      ROTATIONS.each.with_index do |rotation, index|
+        break if scanner_locations[unknown_scanner]
+        rotated_beacons = beacons[unknown_scanner].map(&rotation)
 
-          rotated_data_b.each.with_index do |pointb, indexb|
-            potential_scanner_b_location = subtract(pointa, pointb)
-            points_in_scanner_a_rotation = rotated_data_b.map { |point| add(potential_scanner_b_location, point) }
+        beacons[known_scanner].each.with_index do |known_beacon, indexa|
+          break if scanner_locations[unknown_scanner]
 
-            matches = data[scanner_a] & points_in_scanner_a_rotation
+          rotated_beacons.each.with_index do |beacon, indexb|
+            break if scanner_locations[unknown_scanner]
+
+            beacon_location = subtract(known_beacon, beacon)
+            points_in_known_scanner_reference = rotated_beacons.map { |point| add(beacon_location, point) }
+
+            matches = beacons[known_scanner] & points_in_known_scanner_reference
 
             if matches.size == 12
-              data[scanner_b] = points_in_scanner_a_rotation
-              scanner_locations[scanner_b] = potential_scanner_b_location
-              to_scan << scanner_b
+              beacons[unknown_scanner] = points_in_known_scanner_reference
+              scanner_locations[unknown_scanner] = beacon_location
+              next_scan << unknown_scanner
             end
           end
         end
@@ -131,10 +138,11 @@ loop do
     end
   end
 
+  freshly_located_scanners = next_scan
   puts
 end
 
-scanners = data.values.flatten(1).uniq
+scanners = beacons.values.flatten(1).uniq
 p scanners.size
 
 # Combinatorically find all distances and take the max
