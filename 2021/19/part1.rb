@@ -112,7 +112,7 @@ loop do
         ROTATIONS.each.with_index do |rotation, index|
           break if scanner_locations[scanner_b]
 
-          rotated_data_b = data[scanner_b].map { |point| rotation.call(point) }
+          rotated_data_b = data[scanner_b].map(&rotation)
 
           rotated_data_b.each.with_index do |pointb, indexb|
             potential_scanner_b_location = subtract(pointa, pointb)
