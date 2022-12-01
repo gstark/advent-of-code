@@ -1,3 +1,1 @@
-input = File.readlines("input.txt", chomp: true).map(&:to_i)
-
-p input.chunk_while { |i, j| !j.zero? }.map(&:sum).max
+p ARGF.readlines.map(&:to_i).chunk_while { _2.nonzero? }.map(&:sum).max
