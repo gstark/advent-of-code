@@ -1,4 +1,4 @@
-inputs = ARGF.readline.chomp.chars
+ALL_INPUT = ARGF.readline.chomp.chars
 
 BLANK_LINE = [nil, nil, nil, nil, nil, nil, nil]
 
@@ -44,12 +44,6 @@ board = [
   "-------".chars
 ]
 
-move_count = 0
-rock_count = 0
-piece_x = 2
-piece_y = board.index { |line| !line.empty? } + 4
-piece = ALL_PIECES[rock_count % ALL_PIECES.size]
-
 def overlap?(board, x, y, piece)
   return true if x - piece.min_by { |coord| coord[:x] }[:x] < 0
   return true if x + piece.max_by { |coord| coord[:x] }[:x] > 6
@@ -76,8 +70,20 @@ def print_board(board)
   puts
 end
 
+move_count = 0
+rock_count = 0
+piece_x = 2
+piece_y = board.index { |line| !line.empty? } + 4
+
 loop do
-  case inputs[move_count % inputs.size]
+  piece = ALL_PIECES[rock_count % 4]
+  move = ALL_INPUT[move_count % ALL_INPUT.length]
+
+  puts "move #{move} #{move_count % ALL_INPUT.length}"
+  print_board(render(board, piece_x, piece_y, piece, "@"))
+  5.times { puts }
+
+  case move
   when "<" then piece_x -= 1 unless overlap?(board, piece_x - 1, piece_y, piece)
   when ">" then piece_x += 1 unless overlap?(board, piece_x + 1, piece_y, piece)
   end
@@ -89,13 +95,10 @@ loop do
 
     rock_count += 1
 
-    piece = ALL_PIECES[rock_count % ALL_PIECES.size]
-
     piece_x = 2
     piece_y = board.rindex { |line| !line.empty? } + 4 + piece.max_by { |coord| coord[:y] }[:y]
 
     if rock_count == 2022
-      print_board(board)
       p board.length - 1
       break
     end

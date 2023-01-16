@@ -76,16 +76,25 @@ def print_board(board)
   puts
 end
 
+cache = {}
+
 loop do
   case inputs[move_count % inputs.size]
   when "<" then piece_x -= 1 unless overlap?(board, piece_x - 1, piece_y, piece)
   when ">" then piece_x += 1 unless overlap?(board, piece_x + 1, piece_y, piece)
   end
 
-  move_count += 1
-
   if overlap?(board, piece_x, piece_y - 1, piece)
     board = render(board, piece_x, piece_y, piece)
+
+    if cache[{piece: piece, top: board.last(4), input_index: move_count % inputs.size}]
+      p rock_count
+      p cache[{piece: piece, top: board.last(4), input_index: move_count % inputs.size}]
+      print_board(board)
+      break
+    end
+
+    cache[{piece: piece, top: board.last(4), input_index: move_count % inputs.size}] = board.length
 
     rock_count += 1
 
@@ -95,11 +104,14 @@ loop do
     piece_y = board.rindex { |line| !line.empty? } + 4 + piece.max_by { |coord| coord[:y] }[:y]
 
     if rock_count == 2022
-      print_board(board)
-      p board.length - 1
+      # print_board(board)
+      # p board.length - 1
+      p cache
       break
     end
   else
     piece_y -= 1
   end
+
+  move_count += 1
 end
