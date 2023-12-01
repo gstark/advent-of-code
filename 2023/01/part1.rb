@@ -1,1 +1,1 @@
-puts STDIN.readlines(chomp: true).sum { |line| line.chars.select { |char| char.match?(/[0-9]/) }.yield_self { |digits| 10 * digits.first.to_i + digits.last.to_i } }
+puts STDIN.readlines(chomp: true).sum { |line| line.scan(/\d/).yield_self { |digits| 10 * digits.first.to_i + digits.last.to_i } }
