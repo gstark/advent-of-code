@@ -40,7 +40,11 @@ p STDIN
   .yield_self { |data|
     data[:symbols].map { |position, char| NEIGHBORS.map { |dx, dy| data[:numbers][{row: position[:row] + dx, col: position[:col] + dy}] }.compact.uniq }
   }
-  # Grab all the numbers from the neighbors
-  .flat_map { |neighbors| neighbors.map { |neighbor| neighbor[:number] } }
+  # Only take the results with two neighbors (the gears)
+  .select { |neighbors| neighbors.length == 2}
+  # Take the first part which are the numbers
+  .map { |neighbors| neighbors.map { |neighbor| neighbor[:number] } }
+  # Multiply these together
+  .map { |numbers| numbers.reduce(:*) }
   # And sum them
   .sum
