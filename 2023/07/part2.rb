@@ -74,6 +74,4 @@ p $stdin.readlines
   # sort them, this sorts by rank first, then by the cards and finally by the bid
   .sort
   # now generate their scaled value
-  .map.with_index { |(rank, cards, bid), index| bid * (index + 1) }
-  # sum
-  .sum
+  .each.with_index.sum { |(rank, cards, bid), index| bid * (index + 1) }
