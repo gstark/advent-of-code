@@ -4,7 +4,7 @@ p $stdin
   .yield_self { |directions, map|
     map
       .keys
-      .select { |entry| entry.end_with?("A") }
-      .map { |current| directions.find_index { |direction| (current = (direction == "L") ? map[current][:left] : map[current][:right]).end_with?("Z") } + 1 }
+      .select { |location| location.end_with?("A") }
+      .map { |location| directions.find_index { |direction| (location = (direction == "L") ? map[location][:left] : map[location][:right]).end_with?("Z") } + 1 }
       .reduce(:lcm)
   }
