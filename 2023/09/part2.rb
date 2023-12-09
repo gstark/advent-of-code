@@ -1,7 +1,7 @@
 p $stdin
   .readlines
   .map { |line| line.split.map(&:to_i) }
-  .map { |line|
+  .sum { |line|
     (
       result = []
       loop {
@@ -13,8 +13,3 @@ p $stdin
       .reverse
       .reduce { |number, answer| answer - number }
   }
-  .sum
-
-# [10, 3, 0, 2]
-# [2, 0, 3, 10]
-# [2, -2, 5, 5]
