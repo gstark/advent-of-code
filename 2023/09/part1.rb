@@ -4,7 +4,7 @@ p $stdin
   .sum { |line|
     (
       result = []
-      (0..).map {
+      loop {
         result << line.last
         break result if line.uniq.length == 1
         line = line.each_cons(2).map { |a, b| b - a }
