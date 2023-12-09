@@ -6,11 +6,8 @@ p $stdin
       result = []
       (0..).map {
         result << line.last
+        break result if line.uniq.length == 1
         line = line.each_cons(2).map { |a, b| b - a }
-        if line.uniq.length == 1
-          result << line.last
-          break result
-        end
       }
     ).sum
   }

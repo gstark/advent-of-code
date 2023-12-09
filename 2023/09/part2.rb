@@ -6,11 +6,8 @@ p $stdin
       result = []
       (0..).map {
         result << line.first
+        break result if line.uniq.length == 1
         line = line.each_cons(2).map { |a, b| b - a }
-        if line.uniq.length == 1
-          result << line.first
-          break result
-        end
       }
     )
       .reverse
