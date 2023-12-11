@@ -56,8 +56,8 @@ $height.times.each do |row|
   end
 end
 
+# github: hyper-neutrino
 def hyper_neutrino(found_loop, board)
-  # github: hyper-neutrino
   $height.times.each do |row|
     outside = true
 
