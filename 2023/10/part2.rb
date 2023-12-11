@@ -31,8 +31,8 @@ def find_loop(start, board)
   (0..).each do |index|
     move = MOVES.fetch(board[current]).find { |move| !path.include?([current[0] + move[0], current[1] + move[1]]) }
 
-    break (path << current) if move.nil?
     path << current
+    break path unless move
     current = [current[0] + move[0], current[1] + move[1]]
   end
 end
