@@ -39,7 +39,7 @@ end
 
 def print_board(board, star_pos = nil)
   (0..$height).each do |row|
-    puts (0..$width).map { |col| star_pos == [row,col] ? "*" : board[[row, col]] }.join
+    puts (0..$width).map { |col| (star_pos == [row, col]) ? "*" : board[[row, col]] }.join
   end
 
   5.times { puts }
@@ -50,22 +50,22 @@ end
 # of the loop to '.' since
 # it really doesn't matter
 found_loop = find_loop(start, board)
-(0..$height-1).each do |row|
-  (0..$width-1).each do |col|
+$height.times.each do |row|
+  $width.times.each do |col|
     board[[row, col]] = "." unless found_loop.include?([row, col])
   end
 end
 
 def hyper_neutrino(found_loop, board)
   # github: hyper-neutrino
-  (0..$height-1).each do |row|
+  $height.times.each do |row|
     outside = true
 
     # Assume vertically DOWN
     up = false
     down = true
-    (0..$width-1).each do |col|
-      ch = board[[row,col]]
+    $width.times.each do |col|
+      ch = board[[row, col]]
       case ch
       # If we experience a | we know we are
       # moving from inside to outside
@@ -88,7 +88,7 @@ def hyper_neutrino(found_loop, board)
         if up
           outside = !outside
         end
-      # If we hit a J it must be from an L--- 
+      # If we hit a J it must be from an L---
       # sequence and thus if we we moving down
       # then we toggle if we are outside
       when "J"
@@ -123,8 +123,8 @@ def hyper_neutrino(found_loop, board)
     end
   end
 
-  found_loop.each do |row,col|
-    board[[row,col]] = "O"
+  found_loop.each do |row, col|
+    board[[row, col]] = "O"
   end
   # print_board(board)
 
@@ -142,7 +142,7 @@ def even_odd_rule(found_loop, board)
       !found_loop.include?([row, col]) &&
         # ... and we cross VERTICAL pipes an odd number of times
         # ... getting to the edge of the map
-        (0..col).count { |col2| "L|J".include?(board[[row,col2]]) }.odd?
+        (0..col).count { |col2| "L|J".include?(board[[row, col2]]) }.odd?
     end
   end
 end

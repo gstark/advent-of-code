@@ -1,17 +1,17 @@
-require 'set'
+require "set"
 
 MOVES = {
-  "L" => [[-1,+0], [+0,+1]],
-  "J" => [[+0,-1], [-1,+0]],
-  "|" => [[-1,+0], [+1,+0]],
-  "-" => [[+0,-1], [+0,+1]],
-  "7" => [[+0,-1], [+1,+0]],
-  "F" => [[+0,+1], [+1,+0]] ,
+  "L" => [[-1, +0], [+0, +1]],
+  "J" => [[+0, -1], [-1, +0]],
+  "|" => [[-1, +0], [+1, +0]],
+  "-" => [[+0, -1], [+0, +1]],
+  "7" => [[+0, -1], [+1, +0]],
+  "F" => [[+0, +1], [+1, +0]]
 }
 
 board = $stdin
   .readlines(chomp: true)
-  .each.with_index.with_object({}) { |(line, row), board| line.chars.each.with_index { |char, col| board[[row,col]] = char } }
+  .each.with_index.with_object({}) { |(line, row), board| line.chars.each.with_index { |char, col| board[[row, col]] = char } }
 
 start = board.rassoc("S").first
 
@@ -27,4 +27,4 @@ answer = (0..).each do |index|
   current = [current[0] + move[0], current[1] + move[1]]
 end
 
-p (answer + 1)/2
+p (answer + 1) / 2
