@@ -25,10 +25,8 @@
 #
 # The idea is not my own... alas
 
-CACHE = {}
-
-def solve(dots, blocks, dots_index, blocks_index, current_block_length)
-  CACHE[[dots, blocks, dots_index, blocks_index, current_block_length]] ||= begin
+def solve(cache, dots, blocks, dots_index, blocks_index, current_block_length)
+  cache[[dots, blocks, dots_index, blocks_index, current_block_length]] ||= begin
     current_dot = dots[dots_index]
 
     # If we've reached the end of the line (no current dot) and we've
@@ -37,7 +35,7 @@ def solve(dots, blocks, dots_index, blocks_index, current_block_length)
       return (blocks_index == blocks.length) ? 1 : 0
     end
 
-    ans = 0
+    count = 0
 
     # We are at a . or a ? (which could be a . if we wanted it to be)
     if current_dot == "." || current_dot == "?"
@@ -48,7 +46,7 @@ def solve(dots, blocks, dots_index, blocks_index, current_block_length)
         # next dot index to start the current block
         #
         # This handles the case where we consider the current ? to be a "."
-        ans += solve(dots, blocks, dots_index + 1, blocks_index, 0)
+        count += solve(cache, dots, blocks, dots_index + 1, blocks_index, 0)
       end
 
       if current_block_length == blocks[blocks_index]
@@ -60,7 +58,7 @@ def solve(dots, blocks, dots_index, blocks_index, current_block_length)
         #
         # This is also considering the current ? to be a "." but where
         # doing so, ends a current block.
-        ans += solve(dots, blocks, dots_index + 1, blocks_index + 1, 0)
+        count += solve(cache, dots, blocks, dots_index + 1, blocks_index + 1, 0)
       end
     end
 
@@ -71,10 +69,10 @@ def solve(dots, blocks, dots_index, blocks_index, current_block_length)
       # next dot index as part of the current block, but incrementing the current block length
       #
       # This handles the case where we consider the current ? to be a #
-      ans += solve(dots, blocks, dots_index + 1, blocks_index, current_block_length + 1)
+      count += solve(cache, dots, blocks, dots_index + 1, blocks_index, current_block_length + 1)
     end
 
-    ans
+    count
   end
 end
 
@@ -85,7 +83,7 @@ answer = ARGF
     needed_counts = needed_counts.split(",").map(&:to_i)
 
     # Put a "." on the end so we don't have to worry about dangling blocks
-    solve(lava + ".", needed_counts, 0, 0, 0)
+    solve({}, lava + ".", needed_counts, 0, 0, 0)
   end
 
 p answer
