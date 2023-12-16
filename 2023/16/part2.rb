@@ -25,9 +25,17 @@ def count(grid:, start_row:, start_col:, start_direction:)
         when :down then beam.with(row: row + 1)
         end
       when "|"
-        [beam.with(row: row - 1, direction: :up), beam.with(row: row + 1, direction: :down)]
+        case direction
+        when :up then beam.with(row: row - 1)
+        when :down then beam.with(row: row + 1)
+        else [beam.with(row: row - 1, direction: :up), beam.with(row: row + 1, direction: :down)]
+        end
       when "-"
-        [beam.with(col: col - 1, direction: :left), beam.with(col: col + 1, direction: :right)]
+        case direction
+        when :left then beam.with(col: col - 1)
+        when :right then beam.with(col: col + 1)
+        else [beam.with(col: col - 1, direction: :left), beam.with(col: col + 1, direction: :right)]
+        end
       when "/"
         case direction
         when :right then beam.with(row: row - 1, direction: :up)
@@ -62,5 +70,5 @@ p [
   # top row
   *(0...grid[0].length).map { |start_col| count(grid:, start_row: 0, start_col:, start_direction: :left) },
   # bottom row
-  *(0...grid[0].length).map { |start_col| count(grid:, start_row: grid.length-1, start_col:, start_direction: :left) },
+  *(0...grid[0].length).map { |start_col| count(grid:, start_row: grid.length - 1, start_col:, start_direction: :left) }
 ].max
