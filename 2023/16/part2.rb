@@ -2,8 +2,8 @@ grid = ARGF.readlines(chomp: true).map(&:chars)
 
 Beam = Data.define(:row, :col, :direction)
 
-def count(grid:, start_row:, start_col:)
-  beams = Set.new([Beam.new(row: start_row, col: start_col, direction: :right)])
+def count(grid:, start_row:, start_col:, start_direction:)
+  beams = Set.new([Beam.new(row: start_row, col: start_col, direction: start_direction)])
   energized = Set.new
   seen_beams = Set.new
 
@@ -45,10 +45,22 @@ def count(grid:, start_row:, start_col:)
       end
     end
 
-    beams = beams.select { |beam| (0...grid.length).include?(beam.row) && (0...grid[0].length).include?(beam.col) }
+    beams = beams.select { |beam| (0...grid.length).cover?(beam.row) && (0...grid[0].length).cover?(beam.col) }
 
     return energized.size if beams.empty?
   end
 end
 
-p (0...grid.length).reduce(0) { |max, start_row| [max, count(grid:, start_row:, start_col: 0), count(grid:, start_row:, start_col: grid[0].length - 1)].max }
+#
+#
+# Do need to check all the way around the grid
+p [
+  # left column
+  *(0...grid.length).map { |start_row| count(grid:, start_row:, start_col: 0, start_direction: :right) },
+  # right column
+  *(0...grid.length).map { |start_row| count(grid:, start_row:, start_col: grid[0].length - 1, start_direction: :left) },
+  # top row
+  *(0...grid[0].length).map { |start_col| count(grid:, start_row: 0, start_col:, start_direction: :left) },
+  # bottom row
+  *(0...grid[0].length).map { |start_col| count(grid:, start_row: grid.length-1, start_col:, start_direction: :left) },
+].max
