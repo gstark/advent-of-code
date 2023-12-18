@@ -40,7 +40,6 @@ def a_star(start:, goal:, neighbors:, heuristic:, weight:, inspector: proc {}, v
     path = reconstruct_path(came_from, current)
     inspector.call(came_from, current, path)
 
-
     if goal.call(current)
       return {score: f_score[current], path: path, visited: came_from.keys}
     end
