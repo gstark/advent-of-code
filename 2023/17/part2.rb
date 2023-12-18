@@ -3,38 +3,57 @@ require_relative "debug"
 
 GRID = ARGF.readlines(chomp: true).map { |line| line.chars.map(&:to_i) }
 
+# Constant heuristic
 heuristic = proc { |neighbor| 0 }
-weight = proc { |current, neighbor| GRID[neighbor[:row]][neighbor[:col]] }
+
+# Weight is the cost to go to the neighbor
+weight = proc { |_, neighbor| GRID[neighbor[:row]][neighbor[:col]] }
+
+# No inspector (useful for debugging)
 inspector = proc {}
+
+# Goal is that we've made it to the bottom right corner
+# and we've been going at least 4 in the same direction.
 goal = proc { |details| details[:row] == GRID.length - 1 && details[:col] == GRID[0].length - 1 && details[:last_same].length >= 4 && details[:last_same].first == details[:incoming_direction] }
 
+# Compute neighbors
 neighbors = proc { |neighbor, path|
+  # Extract the row, column, and incoming direction
   row, col, incoming_direction = neighbor.values_at(:row, :col, :incoming_direction)
 
+  # delta_row, delta_col, outgoing direction, opposite direction
   deltas = [
     [0, 1, "right", "left"],
     [1, 0, "down", "up"],
     [0, -1, "left", "right"],
     [-1, 0, "up", "down"]
-  ].reject { |_, _, _, opposite| opposite == incoming_direction }
+  ]
 
+  # Find the elements at the end of the path all going in the same direction
   last_same = path
     .reverse_each
     .take_while { |details| details[:incoming_direction] == incoming_direction }
     .map { |details| details[:incoming_direction] }
 
+  # Reject any deltas that would take us right back in the same direction
+  deltas.reject! { |_, _, _, opposite| opposite == incoming_direction }
+
   if last_same.length < 4 && incoming_direction != "none"
+    # if we haven't gone at least four, this is the only direction we can go
     deltas.select! { |_, _, name, _| name == incoming_direction }
   elsif last_same.length >= 10
+    # If we've gone 10 or more we can't keep going in that direction
     deltas.reject! { |_, _, name, _| name == last_same.first }
   end
 
+  # Generate neighbors with new row, col, incoming direction, and last_same
+  # the incoming direction and "last same" are important for caching.
   deltas
-    .map { |dr, dc, name, _| {row: row + dr, col: col + dc, incoming_direction: name, last_same: last_same} }
+    .map { |delta_row, delta_col, name, _| {row: row + delta_row, col: col + delta_col, incoming_direction: name, last_same: last_same} }
     .select { |details| (0...GRID.length).cover?(details[:row]) && (0...GRID[0].length).cover?(details[:col]) }
 }
 
-result_a = a_star(
+result = a_star(
   start: {row: 0, col: 0, incoming_direction: "none", last_same: []},
   inspector:,
   goal:,
@@ -42,6 +61,5 @@ result_a = a_star(
   heuristic:,
   weight:
 )
-result_a[:path].reject! { |details| details[:row] == 0 && details[:col] == 0 }
-score_path(result_a[:path], print: true)
-puts
+score_path(result[:path], print: true)
+puts result[:score]
