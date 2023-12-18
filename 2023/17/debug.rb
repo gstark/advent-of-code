@@ -30,8 +30,4 @@ def score_path(path, print: false)
       puts
     end
   end
-
-  answer = path.sum { |details| GRID[details[:row]][details[:col]] }
-  puts answer if print
-  answer
 end
