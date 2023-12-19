@@ -1,53 +1,25 @@
 plan = ARGF.readlines(chomp: true).map(&:split).map { |direction, length, color| [direction, length.to_i, color] }
 
-map = {}
-row = 0
-col = 0
-max_row = 0
-max_col = 0
-min_row = 1_000_000_000
-min_col = 1_000_000_000
-map[{row:, col:}] = "#"
+# Lookup table
+DIRS = {
+  "D" => {x: 0, y: -1},
+  "U" => {x: 0, y: 1},
+  "L" => {x: -1, y: 0},
+  "R" => {x: 1, y: 0}
+}
 
-plan.each.each do |direction, length, color|
-  case direction
-  when "L" then length.times { map[{row:, col: col -= 1}] = "#" }
-  when "R" then length.times { map[{row:, col: col += 1}] = "#" }
-  when "U" then length.times { map[{row: row -= 1, col:}] = "#" }
-  when "D" then length.times { map[{row: row += 1, col:}] = "#" }
-  end
-  max_row = [row, max_row].max
-  max_col = [col, max_col].max
-  min_row = [row, min_row].min
-  min_col = [col, min_col].min
-end
+# Start here
+coords = [{x: 0, y: 0}]
 
-def flood_fill(map, row, col)
-  queue = []
-  queue << {row:, col:}
-  seen = Set.new
+# Go through each instruction, building up a set of coordinates
+coords = plan.map { |direction, length, color| {x: coords.last[:x] + DIRS[direction][:x] * length, y: coords.last[:y] + DIRS[direction][:y] * length} }
 
-  while queue.any?
-    row, col = queue.pop.values_at(:row, :col)
-    map[{row:, col:}] = "#"
-    seen << {row:, col:}
+# Shoelace formula for area: https://en.wikipedia.org/wiki/Shoelace_formula
+area = 0.5 * (1...coords.length - 1).sum { |i| coords[i][:x] * (coords[i + 1][:y] - coords[i - 1][:y]) }.abs
 
-    (-1..1).each do |dr|
-      (-1..1).each do |dc|
-        if map[{row: row + dr, col: col + dc}].nil? && !seen.include?({row: row + dr, col: col + dc})
-          queue << {row: row + dr, col: col + dc}
-        end
-      end
-    end
-  end
-end
+# Picks theorem solved for interior points: https://en.wikipedia.org/wiki/Pick%27s_theorem
+boundary = plan.sum { |_, length, _| length }
+interior = area - boundary / 2 + 1
 
-flood_fill(map, 1, 1)
-
-# (min_row..max_row).each do |row|
-#   (min_col..max_col).each do |col|
-#     print map[{row:, col:}] || "."
-#   end
-#   puts
-# end
-p map.size
+# Add the interior plus the boundary
+p interior + boundary
