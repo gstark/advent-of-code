@@ -15,6 +15,7 @@ neighbors = proc { |(row, col), path|
     .select { |nr, nc| nr >= 0 && nc >= 0 && nr < garden.size && nc < garden[0].size && garden[nr][nc] != "#" }
 }
 
+new_garden = garden.map(&:dup)
 total = 0
 garden.size.times do |row|
   garden[0].size.times do |col|
@@ -32,9 +33,11 @@ garden.size.times do |row|
 
     steps = path.length - 1
     if steps.even?
+      new_garden[row][col] = "O"
       total += 1
     end
   end
 end
 
 p total
+puts new_garden.map(&:join)
