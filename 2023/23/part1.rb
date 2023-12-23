@@ -2,6 +2,14 @@ require_relative "astar"
 
 grid = ARGF.readlines(chomp: true).map(&:chars)
 
+# Define a function to return the valid [row,col] neighbors
+def valid_neighbors(grid, row, col, directions)
+  directions
+    .map { |dr, dc| [row + dr, col + dc] }
+    .select { |row, col| row >= 0 && col >= 0 && row < grid.length && col < grid[0].length }
+    .select { |row, col| grid[row][col] != "#" }
+end
+
 height = grid.length
 width = grid[0].length
 
@@ -27,12 +35,9 @@ while queue.any?
   else [[0, -1], [0, 1], [-1, 0], [1, 0]]
   end
 
-  directions
-    .map { |dr, dc| [row + dr, col + dc] }
-    .select { |row, col| row >= 0 && col >= 0 && row < grid.length && col < grid[0].length }
-    .select { |row, col| grid[row][col] != "#" }
-    .select { |row, col| !path.include?([row,col]) }
-    .each { |row, col| queue << [row, col, Set.new([*path, [row,col]])] }
+  valid_neighbors(grid, row, col, directions)
+    .select { |row, col| !path.include?([row, col]) }
+    .each { |row, col| queue << [row, col, Set.new([*path, [row, col]])] }
 end
 
 p walks.max
