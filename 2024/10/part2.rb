@@ -2,7 +2,7 @@ map = $stdin.read.split("\n").map { |row| row.chars.map(&:to_i) }
 
 DIRS = [[0, 1], [1, 0], [0, -1], [-1, 0]]
 
-def is_path(grid, row, col, next_step, endings)
+def is_path(grid, row, col, next_step)
   count = 0
 
   DIRS.each do |delta_row, delta_col|
@@ -17,19 +17,16 @@ def is_path(grid, row, col, next_step, endings)
 
     # The right step and we are at an ending
     if grid[next_row][next_col] == 9 && next_step == 9
-      # Record this ending
-      endings << [next_row, next_col]
-
       # increase our count
       count += 1
     end
 
     # Add the recursion of going in this direction
-    count += is_path(grid, next_row, next_col, next_step + 1, endings)
+    count += is_path(grid, next_row, next_col, next_step + 1)
   end
 
   # Return the count
   count
 end
 
-p (0...map.size).sum { |row| (0...map.size).sum { |col| (map[row][col] == 0) ? is_path(map, row, col, 1, Set.new) : 0 } }
+p (0...map.size).sum { |row| (0...map.size).sum { |col| (map[row][col] == 0) ? is_path(map, row, col, 1) : 0 } }
