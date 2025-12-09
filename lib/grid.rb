@@ -12,10 +12,16 @@ class Grid
     @wrap = wrap
   end
 
-  def [](row, col)
-    return nil unless valid?(row, col)
+  def [](row, col = nil)
+    if col.nil?
+      return nil unless row >= 0 && row < @height
 
-    @data[row][col]
+      @data[row]
+    else
+      return nil unless valid?(row, col)
+
+      @data[row][col]
+    end
   end
 
   def []=(row, col, value)
@@ -51,6 +57,10 @@ class Grid
 
   def to_s
     @data.map(&:join).join("\n")
+  end
+
+  def rows
+    @data
   end
 
   private
