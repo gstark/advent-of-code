@@ -1,0 +1,116 @@
+/// A field of pipes hides one big loop through `S`. The farthest tile along it is
+/// exactly half way round, so the answer is the loop's length divided by two:
+/// `grid1.txt` has a 16-tile loop, so its farthest tile is 8 steps away. (The
+/// other grids are part 2's examples, and their numbers are enclosed-tile counts,
+/// not distances.)
+///
+/// `S`'s own shape is not given, and is not worked out either. What matters is
+/// which of its four neighbours point back at it — those are the two ends of the
+/// loop, and following either one gets all the way round. Walking is then just
+/// "leave by whichever exit is not where I came from", which needs no notion of
+/// direction and no visited set.
+///
+/// The repo's `sample*.txt` carry two extra lines from the Ruby version: `S`'s
+/// shape on top and the expected count at the bottom. `grid1.txt` through
+/// `grid5.txt` are those same grids, plain.
+///
+/// Advent of Code 2023, day 10, part 1. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Point = { c: Int, r: Int }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+/// Anything off the edge reads as ground, which keeps the edges from needing a
+/// special case anywhere else.
+fn tile(grid: List[Str], at: Point) -> Str {
+  match grid.get(at.r) {
+    None => "."
+    Some(row) => if at.c < 0 or at.c >= row.len() { "." } else { row.slice(at.c, at.c + 1) }
+  }
+}
+
+/// The two tiles a pipe connects to. Ground and `S` connect to nothing here —
+/// `S`'s connections are discovered from the other side, in `loop_ends`.
+fn exits(pipe: Str, at: Point) -> List[Point] {
+  let north = { c: at.c, r: at.r - 1 }
+  let south = { c: at.c, r: at.r + 1 }
+  let east = { c: at.c + 1, r: at.r }
+  let west = { c: at.c - 1, r: at.r }
+  if pipe == "|" {
+    [north, south]
+  } else if pipe == "-" {
+    [east, west]
+  } else if pipe == "L" {
+    [north, east]
+  } else if pipe == "J" {
+    [north, west]
+  } else if pipe == "7" {
+    [south, west]
+  } else if pipe == "F" {
+    [south, east]
+  } else {
+    []
+  }
+}
+
+fn find_start(grid: List[Str]) -> Result[Point, Str] {
+  let found = List.range(0, grid.len()).flat_map(fn(r) {
+    match Str.index_of(grid.get(r).unwrap_or(""), "S") {
+      None => []
+      Some(c) => [{ c: c, r: r }]
+    }
+  })
+  found.first().ok_or("no start tile")
+}
+
+/// The neighbours whose own pipes point back at `S`. There are exactly two.
+fn loop_ends(grid: List[Str], start: Point) -> List[Point] {
+  [
+    { c: start.c, r: start.r - 1 },
+    { c: start.c, r: start.r + 1 },
+    { c: start.c + 1, r: start.r },
+    { c: start.c - 1, r: start.r },
+  ].filter(fn(at) { exits(tile(grid, at), at).contains(start) })
+}
+
+fn walk(grid: List[Str], start: Point, from: Point, at: Point, steps: Int) -> Result[Int, Str] {
+  if at == start {
+    Ok(steps)
+  } else {
+    let onward = exits(tile(grid, at), at).reject(fn(next) { next == from })
+    walk(grid, start, at, onward.first().ok_or("the loop runs into a dead end")?, steps + 1)
+  }
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let grid = read_lines(sys.fs, path)?
+  let start = find_start(grid)?
+  let first = loop_ends(grid, start).first().ok_or("the start tile connects to nothing")?
+  let length = walk(grid, start, start, first, 1)?
+  sys.console.print("loop length: " ++ Int.to_str(length))
+  sys.console.print("steps to the farthest tile: " ++ Int.to_str(length / 2))
+  Ok(())
+}

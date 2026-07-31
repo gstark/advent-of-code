@@ -1,0 +1,123 @@
+/// Bricks are snapshotted mid-fall; let them settle, then count how many could be
+/// disintegrated without anything else moving. 5 of the 7 on `sample.txt` — only
+/// `A`, the sole support of two bricks, and `F`, the sole support of `G`, are
+/// unsafe.
+///
+/// Settling needs no simulation of falling. Taking the bricks in order of height,
+/// every brick beneath a given one has already landed, so its resting height is
+/// simply one above the tallest column its footprint covers. Two small maps track
+/// that: the current top height of each `(x, y)` column, and which brick is
+/// sitting at that top.
+///
+/// A brick is unsafe exactly when something above it rests on it *alone*, so the
+/// supports are collected while settling and the unsafe bricks read straight off:
+/// every brick with exactly one supporter condemns that supporter. Nothing is ever
+/// removed and re-dropped.
+///
+/// Advent of Code 2023, day 22, part 1. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+/// A brick as given, with `lo` and `hi` ordered on every axis.
+type Brick = { hx: Int, hy: Int, hz: Int, lx: Int, ly: Int, lz: Int }
+
+/// The columns as bricks land on them, and each brick's supporters by index.
+type Stack = { supports: List[List[Int]], tops: Map[Int, Int], heights: Map[Int, Int] }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line.trim() == "" }))
+  }
+}
+
+fn parse_end(text: Str) -> Result[List[Int], Str] {
+  let parts = text.trim().split(",").try_map(Int.parse)?
+  if parts.len() != 3 {
+    Err("expected `x,y,z`, got: " ++ text)
+  } else {
+    Ok(parts)
+  }
+}
+
+fn parse_brick(line: Str) -> Result[Brick, Str] {
+  let ends = line.split("~")
+  let a = parse_end(ends.get(0).ok_or("expected `<end>~<end>`, got: " ++ line)?)?
+  let b = parse_end(ends.get(1).ok_or("expected `<end>~<end>`, got: " ++ line)?)?
+  Ok({
+    hx: Int.max(a.get(0).unwrap_or(0), b.get(0).unwrap_or(0)),
+    hy: Int.max(a.get(1).unwrap_or(0), b.get(1).unwrap_or(0)),
+    hz: Int.max(a.get(2).unwrap_or(0), b.get(2).unwrap_or(0)),
+    lx: Int.min(a.get(0).unwrap_or(0), b.get(0).unwrap_or(0)),
+    ly: Int.min(a.get(1).unwrap_or(0), b.get(1).unwrap_or(0)),
+    lz: Int.min(a.get(2).unwrap_or(0), b.get(2).unwrap_or(0)),
+  })
+}
+
+/// The `(x, y)` columns a brick stands on, packed one to an `Int`.
+fn footprint(brick: Brick) -> List[Int] {
+  List.range(brick.lx, brick.hx + 1).flat_map(fn(x) {
+    List.range(brick.ly, brick.hy + 1).map(fn(y) { x * 1000 + y })
+  })
+}
+
+/// Lands one brick on the stack so far, recording what it came to rest on.
+fn settle(stack: Stack, brick: Brick, index: Int) -> Stack {
+  let columns = footprint(brick)
+  let base = columns.map(fn(column) { Map.get(stack.heights, column).unwrap_or(0) }).max().unwrap_or(0)
+  let resting = columns
+    .filter(fn(column) { Map.get(stack.heights, column).unwrap_or(0) == base and base > 0 })
+    .flat_map(fn(column) { Option.to_list(Map.get(stack.tops, column)) })
+    .uniq()
+  let top = base + 1 + brick.hz - brick.lz
+  {
+    supports: stack.supports.push(resting),
+    tops: columns.fold(stack.tops, fn(tops, column) { Map.insert(tops, column, index) }),
+    heights: columns.fold(stack.heights, fn(heights, column) { Map.insert(heights, column, top) }),
+  }
+}
+
+/// Bricks settle from the bottom up, so the snapshot is sorted by its lower `z`
+/// first — that is what makes one pass enough.
+fn settle_all(bricks: List[Brick]) -> Stack {
+  let ordered = bricks.sort_by(fn(brick) { brick.lz })
+  List.range(0, ordered.len()).fold({ supports: [], tops: Map.empty(), heights: Map.empty() }, fn(stack, index) {
+    settle(stack, ordered.get(index).unwrap_or({ hx: 0, hy: 0, hz: 0, lx: 0, ly: 0, lz: 0 }), index)
+  })
+}
+
+/// A brick resting on exactly one other makes that one unsafe to remove.
+fn unsafe_bricks(supports: List[List[Int]]) -> Map[Int, Bool] {
+  supports.fold(Map.empty(), fn(condemned, resting) {
+    if resting.len() == 1 {
+      Map.insert(condemned, resting.first().unwrap_or(0), true)
+    } else {
+      condemned
+    }
+  })
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let bricks = read_lines(sys.fs, path)?.try_map(parse_brick)?
+  let settled = settle_all(bricks)
+  let condemned = unsafe_bricks(settled.supports)
+  sys.console.print("bricks: " ++ Int.to_str(bricks.len()) ++ ", load-bearing: " ++ Int.to_str(Map.len(condemned)))
+  sys.console.print("safe to disintegrate: " ++ Int.to_str(bricks.len() - Map.len(condemned)))
+  Ok(())
+}

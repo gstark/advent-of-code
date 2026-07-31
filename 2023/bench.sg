@@ -1,0 +1,38 @@
+type Console = { print: fn(Str) -> Unit }
+type Sys = { console: Console, args: List[Str] }
+
+fn bench_map_insert(n: Int) -> Int {
+  Map.len(List.range(0, n).fold(Map.empty(), fn(m, i) { Map.insert(m, i, true) }))
+}
+
+fn bench_map_has(n: Int) -> Int {
+  let m = List.range(0, n).fold(Map.empty(), fn(m, i) { Map.insert(m, i, true) })
+  List.range(0, n).count(fn(i) { Map.has(m, i) })
+}
+
+fn bench_arith(n: Int) -> Int {
+  List.range(0, n).fold(0, fn(a, i) { a + i * 4 % 7 })
+}
+
+fn bench_record(n: Int) -> Int {
+  List.range(0, n).fold(0, fn(a, i) {
+    let p = { c: i, d: 1, r: i }
+    a + p.c + p.d + p.r
+  })
+}
+
+fn bench_slice(n: Int) -> Int {
+  List.range(0, n).count(fn(i) { "abcdefghij".slice(i % 10, i % 10 + 1) == "e" })
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let n = Int.parse(sys.args.first().unwrap_or("200000"))?
+  let which = sys.args.get(1).unwrap_or("arith")
+  let out = if which == "map_insert" { bench_map_insert(n) }
+    else if which == "map_has" { bench_map_has(n) }
+    else if which == "record" { bench_record(n) }
+    else if which == "slice" { bench_slice(n) }
+    else { bench_arith(n) }
+  sys.console.print(which ++ " " ++ Int.to_str(n) ++ " -> " ++ Int.to_str(out))
+  Ok(())
+}

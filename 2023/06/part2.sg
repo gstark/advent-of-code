@@ -1,0 +1,82 @@
+/// Bad kerning: the spaces on both lines mean nothing, and there is only ever one
+/// race. `Time: 7 15 30` is really a 71530 millisecond race whose record is
+/// 940200 — 71503 winning holds on `sample.txt`.
+///
+/// The race is now about forty million milliseconds long, which rules out trying
+/// each hold. It does not matter: the bisection from part 1 does not care how
+/// large `t` is, and settles this in a few dozen comparisons.
+///
+/// Advent of Code 2023, day 6, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Race = { record: Int, time: Int }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+/// Closing up the gaps is the whole of part 2's rule change: the digits after the
+/// label, joined, are the number.
+fn number_after_label(line: Str) -> Result[Int, Str] {
+  let body = line.split(":").get(1).ok_or("expected `<label>: <numbers>`, got: " ++ line)?
+  Int.parse(body.words().join(""))
+}
+
+fn parse_race(lines: List[Str]) -> Result[Race, Str] {
+  Ok({
+    record: number_after_label(lines.get(1).ok_or("expected a `Distance:` line")?)?,
+    time: number_after_label(lines.get(0).ok_or("expected a `Time:` line")?)?,
+  })
+}
+
+fn beats(race: Race, hold: Int) -> Bool {
+  hold * (race.time - hold) > race.record
+}
+
+fn bisect(race: Race, lo: Int, hi: Int) -> Int {
+  if lo >= hi {
+    lo
+  } else {
+    let mid = (lo + hi) / 2
+    if beats(race, mid) {
+      bisect(race, lo, mid)
+    } else {
+      bisect(race, mid + 1, hi)
+    }
+  }
+}
+
+fn ways(race: Race) -> Int {
+  let best = race.time / 2
+  if not beats(race, best) {
+    0
+  } else {
+    race.time - 2 * bisect(race, 0, best) + 1
+  }
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let race = parse_race(read_lines(sys.fs, path)?)?
+  sys.console.print("ways to win the long race: " ++ Int.to_str(ways(race)))
+  Ok(())
+}

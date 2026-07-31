@@ -1,0 +1,32 @@
+type Console = { print: fn(Str) -> Unit }
+type Sys = { console: Console, args: List[Str] }
+
+fn b_push(n: Int) -> Int { List.range(0, n).fold([], fn(acc, i) { acc.push(i) }).len() }
+fn b_concat(n: Int) -> Int { List.range(0, n).fold([], fn(acc, i) { acc ++ [i] }).len() }
+fn b_prepend(n: Int) -> Int { List.range(0, n).fold([], fn(acc, i) { [i] ++ acc }).len() }
+fn b_uniq(n: Int) -> Int { List.range(0, n).uniq().len() }
+fn b_get(n: Int) -> Int {
+  let xs = List.range(0, n)
+  List.range(0, n).fold(0, fn(a, i) { a + xs.get(i).unwrap_or(0) })
+}
+fn b_contains(n: Int) -> Int {
+  let xs = List.range(0, n)
+  List.range(0, 1000).count(fn(i) { xs.contains(i) })
+}
+fn b_map(n: Int) -> Int { List.range(0, n).map(fn(i) { i + 1 }).len() }
+fn b_strcat(n: Int) -> Int { List.range(0, n).fold("", fn(s, i) { s ++ "x" }).len() }
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let n = Int.parse(sys.args.first().unwrap_or("10000"))?
+  let w = sys.args.get(1).unwrap_or("push")
+  let out = if w == "push" { b_push(n) }
+    else if w == "concat" { b_concat(n) }
+    else if w == "prepend" { b_prepend(n) }
+    else if w == "uniq" { b_uniq(n) }
+    else if w == "get" { b_get(n) }
+    else if w == "contains" { b_contains(n) }
+    else if w == "strcat" { b_strcat(n) }
+    else { b_map(n) }
+  sys.console.print(w ++ " " ++ Int.to_str(n) ++ " -> " ++ Int.to_str(out))
+  Ok(())
+}

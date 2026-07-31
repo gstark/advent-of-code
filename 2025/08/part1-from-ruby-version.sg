@@ -1,0 +1,202 @@
+/// Advent of Code 2025, day 8 — a **direct** conversion of `part1.rb`.
+///
+/// `part1.sg` solves the same puzzle a different way: squared distances, a
+/// union-find forest, and a tally. This file does not. It is `part1.rb`'s
+/// algorithm, statement for statement, so that a timing of the two languages is
+/// a timing of the languages rather than of two people's choices:
+///
+/// - `Math.sqrt` distances, and the sort is on those `Float`s — not on the
+///   squared `Int`s that would order identically.
+/// - Circuits are a **list of lists of points**, scanned linearly for the one
+///   holding a given point, exactly as `find_index { |c| c.include?(p) }` does.
+///   No disjoint-set forest, no path shortening.
+/// - The five-branch `if`/`elsif` chain over the two circuit indices is
+///   preserved branch for branch, including which side is appended to which.
+///
+/// Three things could not come across, and each is a place Sigil says something
+/// Ruby leaves unsaid:
+///
+/// 1. **`circuits` is not mutated**, because nothing in Sigil is. Ruby's `each`
+///    over a mutable array becomes a `fold` whose accumulator is the array, and
+///    `<<` / `[i] =` / `delete_at` become `push` / [`set_at`] / [`delete_at`]
+///    below, each rebuilding the list. That is the same algorithm at a
+///    different cost, and it is the honest cost of the same program here.
+/// 2. **`raise "oops"` is gone.** Its guard — both indices nil *and* not both
+///    nil — is unreachable, and a `match` on two `Option`s covers the four
+///    cases with no room for a fifth. The branch had nowhere to be written.
+/// 3. **A point read out of the list by index is an `Option`**, and `i` and `j`
+///    came from `List.range(0, len)` so it can never be `None`. The language
+///    has no way to say that, so `unwrap_or(origin)` discharges a proof
+///    obligation with a value that would be wrong if it were ever reached.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+/// Ruby keeps a point as the three-element array `split(",").map(&:to_i)` gives
+/// it, and reads `point[0]` / `[1]` / `[2]`. A record is the same three numbers
+/// under names the compiler checks, and it is the one liberty this file takes.
+type Point = { x: Int, y: Int, z: Int }
+
+/// One entry of `COMBOS`: Ruby's `[[point1, point2], distance]`.
+type Combo = { first: Point, second: Point, distance: Float }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+/// `ARGF.readlines(chomp: true)`.
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn field_at(parts: List[Str], i: Int, line: Str) -> Result[Int, Str] {
+  Int.parse(parts.get(i).ok_or("expected x,y,z but got: " ++ line)?)
+}
+
+/// `line.split(",").map(&:to_i)`, with the failure Ruby's `to_i` swallows.
+fn parse_point(line: Str) -> Result[Point, Str] {
+  let parts = line.split(",")
+  if parts.len() != 3 {
+    Err("expected x,y,z but got: " ++ line)
+  } else {
+    Ok({ x: field_at(parts, 0, line)?, y: field_at(parts, 1, line)?, z: field_at(parts, 2, line)? })
+  }
+}
+
+fn square(n: Int) -> Int {
+  n * n
+}
+
+/// `Math.sqrt((p1[0] - p2[0])**2 + ...)`. The square root is kept even though
+/// it cannot change the order, because dropping it is an optimisation `part1.rb`
+/// does not make and this file is not allowed to make either.
+fn distance(point1: Point, point2: Point) -> Float {
+  Float.sqrt(Int.to_float(square(point1.x - point2.x) + square(point1.y - point2.y) + square(point1.z - point2.z)))
+}
+
+/// `(points.length > 30) ? 1000 : 10`.
+fn size_for(points: List[Point]) -> Int {
+  if points.len() > 30 {
+    1000
+  } else {
+    10
+  }
+}
+
+/// `points.combination(2).map { |p1, p2| [[p1, p2], distance(p1, p2)] }`.
+///
+/// `combination(2)` yields every unordered pair in index order, which is what
+/// the two nested ranges say directly.
+fn combinations(points: List[Point]) -> List[Combo] {
+  let n = points.len()
+  let origin = { x: 0, y: 0, z: 0 }
+  List.range(0, n).flat_map(fn(i) {
+    let first = points.get(i).unwrap_or(origin)
+    List.range(i + 1, n).map(fn(j) {
+      let second = points.get(j).unwrap_or(origin)
+      { first: first, second: second, distance: distance(first, second) }
+    })
+  })
+}
+
+/// `circuits.find_index { |circuit| circuit.include?(point) }`, as the cursor
+/// recursion that a language with no loop and no index operator leaves you.
+fn find_index(circuits: List[List[Point]], point: Point, at: Int) -> Option[Int] {
+  match circuits.first() {
+    None => None
+    Some(circuit) => {
+      if circuit.contains(point) {
+        Some(at)
+      } else {
+        find_index(circuits.drop(1), point, at + 1)
+      }
+    }
+  }
+}
+
+/// `circuits[index] = circuit`.
+fn set_at(circuits: List[List[Point]], index: Int, circuit: List[Point]) -> List[List[Point]] {
+  circuits.take(index) ++ [circuit] ++ circuits.drop(index + 1)
+}
+
+/// `circuits.delete_at(index)`.
+fn delete_at(circuits: List[List[Point]], index: Int) -> List[List[Point]] {
+  circuits.take(index) ++ circuits.drop(index + 1)
+}
+
+/// `circuits[index]`, for an index `find_index` has just returned.
+fn circuit_at(circuits: List[List[Point]], index: Int) -> List[Point] {
+  circuits.get(index).unwrap_or([])
+}
+
+/// Ruby's fourth branch: the two circuits become one, and both originals are
+/// deleted — higher index first, so deleting the first does not move the
+/// second. `[a, b].sort.reverse_each` says that; `Int.max` / `Int.min` say it
+/// for exactly two.
+fn merge(circuits: List[List[Point]], left_index: Int, right_index: Int) -> List[List[Point]] {
+  let joined = circuits.push(circuit_at(circuits, left_index) ++ circuit_at(circuits, right_index))
+  delete_at(delete_at(joined, Int.max(left_index, right_index)), Int.min(left_index, right_index))
+}
+
+/// One iteration of `COMBOS.each`. Ruby reads `left` out of `points[1]` and
+/// `right` out of `points[0]` — the pair the far way round — and which side is
+/// appended to which follows from that, so it is kept.
+fn wire(circuits: List[List[Point]], combo: Combo) -> List[List[Point]] {
+  let left = combo.second
+  let right = combo.first
+  match find_index(circuits, left, 0) {
+    Some(left_index) => {
+      match find_index(circuits, right, 0) {
+        // both points are in the same circuit — do nothing
+        // one side is in a circuit and the other is in a different circuit
+        Some(right_index) => {
+          if left_index == right_index {
+            circuits
+          } else {
+            merge(circuits, left_index, right_index)
+          }
+        }
+        // left side is in a circuit and the right is in none
+        None => set_at(circuits, left_index, circuit_at(circuits, left_index).push(right))
+      }
+    }
+    None => {
+      match find_index(circuits, right, 0) {
+        // right side is in a circuit and the left is in none
+        Some(right_index) => set_at(circuits, right_index, circuit_at(circuits, right_index).push(left))
+        // neither side is in a circuit, so create a new one
+        None => circuits.push([left, right])
+      }
+    }
+  }
+}
+
+/// `circuits.map(&:size).sort.last(3)`. `List.last` answers with one element,
+/// so the last three are what is left after dropping all but them — and the
+/// clamp is Ruby's, which returns a short array rather than failing.
+fn largest_three(circuits: List[List[Point]]) -> List[Int] {
+  let sizes = circuits.map(fn(circuit) { circuit.len() }).sorted()
+  sizes.drop(Int.max(0, sizes.len() - 3))
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let points = read_lines(sys.fs, path)?.try_map(parse_point)?
+  let size = size_for(points)
+  let combos = combinations(points).sort_by(fn(combo) { combo.distance }).take(size)
+  let circuits = combos.fold([], wire)
+  sys.console.print(Int.to_str(largest_three(circuits).fold(1, fn(product, n) { product * n })))
+  Ok(())
+}

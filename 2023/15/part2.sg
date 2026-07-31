@@ -1,0 +1,91 @@
+/// The same sequence read as instructions. A step's label hashes to a box number;
+/// `-` removes that label's lens from the box, `=` either replaces the focal
+/// length of a lens already there — leaving it where it sits — or adds a new lens
+/// at the back. Focusing power sums `(box + 1) * slot * focal length`: 145 on
+/// `sample.txt`.
+///
+/// The distinction the puzzle draws between replacing in place and appending is
+/// the whole of the difficulty, and it falls out of keeping each box as an ordered
+/// list keyed by label: replacing maps over the list and changes one focal length,
+/// which cannot move anything; adding is a push. Removal is a `reject`, and the
+/// lenses behind close up because a list has no gaps to leave.
+///
+/// The 256 boxes are a `Map` rather than a list of 256 lists — most stay empty,
+/// and a missing entry reads as an empty box.
+///
+/// Advent of Code 2023, day 15, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Lens = { focal: Int, label: Str }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_steps(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.replace("\n", "").trim().split(",").reject(fn(step) { step == "" }))
+  }
+}
+
+fn hash(text: Str) -> Int {
+  text.chars().fold(0, fn(value, character) {
+    (value + Str.code_of(character).unwrap_or(0)) * 17 % 256
+  })
+}
+
+fn box_of(boxes: Map[Int, List[Lens]], label: Str) -> List[Lens] {
+  Map.get(boxes, hash(label)).unwrap_or([])
+}
+
+/// A lens already in the box keeps its slot and gets the new focal length;
+/// otherwise it joins the back.
+fn install(lenses: List[Lens], fitted: Lens) -> List[Lens] {
+  if lenses.any(fn(lens) { lens.label == fitted.label }) {
+    lenses.map(fn(lens) { if lens.label == fitted.label { fitted } else { lens } })
+  } else {
+    lenses.push(fitted)
+  }
+}
+
+fn apply(boxes: Map[Int, List[Lens]], step: Str) -> Result[Map[Int, List[Lens]], Str] {
+  if step.ends_with("-") {
+    let label = step.slice(0, step.len() - 1)
+    Ok(Map.insert(boxes, hash(label), box_of(boxes, label).reject(fn(lens) { lens.label == label })))
+  } else {
+    let halves = step.split("=")
+    let label = halves.get(0).ok_or("expected `<label>=<focal>` or `<label>-`, got: " ++ step)?
+    let focal = Int.parse(halves.get(1).ok_or("expected a focal length, got: " ++ step)?)?
+    Ok(Map.insert(boxes, hash(label), install(box_of(boxes, label), { focal: focal, label: label })))
+  }
+}
+
+fn focusing_power(boxes: Map[Int, List[Lens]]) -> Int {
+  List.range(0, 256).map(fn(number) {
+    let lenses = Map.get(boxes, number).unwrap_or([])
+    List.range(0, lenses.len()).map(fn(slot) {
+      (number + 1) * (slot + 1) * lenses.get(slot).map(fn(lens) { lens.focal }).unwrap_or(0)
+    }).sum()
+  }).sum()
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let steps = read_steps(sys.fs, path)?
+  let boxes = steps.fold(Ok(Map.empty()), fn(carried, step) { apply(carried?, step) })?
+  sys.console.print("focusing power: " ++ Int.to_str(focusing_power(boxes)))
+  Ok(())
+}

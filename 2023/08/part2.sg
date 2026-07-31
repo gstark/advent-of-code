@@ -1,0 +1,111 @@
+/// Every node ending in `A` is walked at once, and the question is when they all
+/// stand on nodes ending in `Z` together. 6 steps on `sample3.txt`; about nine
+/// trillion on the real input, which rules out stepping them.
+///
+/// So each ghost is measured alone and the answers combined with a least common
+/// multiple. That is a claim about *this* input, not a general solution: it holds
+/// because each start reaches exactly one `Z` node and returns to it every `n`
+/// steps thereafter, with the cycle already aligned to the start. AoC inputs are
+/// built that way; a network where a ghost's first `Z` came at a different offset
+/// from its period would need the Chinese remainder theorem instead, and one with
+/// several reachable `Z` nodes would need more than that. The assumption is worth
+/// naming rather than hiding, since nothing in the puzzle text promises it.
+///
+/// Advent of Code 2023, day 8, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Node = { left: Str, right: Str }
+
+type Network = { nodes: Map[Str, Node], turns: Str }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line.trim() == "" }))
+  }
+}
+
+fn parse_node(line: Str) -> Result[{ name: Str, node: Node }, Str] {
+  let halves = line.split("=")
+  let name = halves.get(0).ok_or("expected `<name> = (<left>, <right>)`, got: " ++ line)?.trim()
+  let body = halves.get(1).ok_or("expected `<name> = (<left>, <right>)`, got: " ++ line)?
+  let pair = body.replace("(", "").replace(")", "").split(",")
+  Ok({
+    name: name,
+    node: {
+      left: pair.get(0).ok_or("expected two successors, got: " ++ line)?.trim(),
+      right: pair.get(1).ok_or("expected two successors, got: " ++ line)?.trim(),
+    },
+  })
+}
+
+fn parse_network(lines: List[Str]) -> Result[Network, Str] {
+  let turns = lines.first().ok_or("expected a line of turns")?
+  let parsed = lines.drop(1).try_map(parse_node)?
+  Ok({
+    nodes: parsed.fold(Map.empty(), fn(nodes, entry) { Map.insert(nodes, entry.name, entry.node) }),
+    turns: turns.trim(),
+  })
+}
+
+fn turn_at(turns: Str, step: Int) -> Str {
+  let index = step % turns.len()
+  turns.slice(index, index + 1)
+}
+
+fn hop(network: Network, from: Str, step: Int) -> Result[Str, Str] {
+  let node = Map.get(network.nodes, from).ok_or("no such node: " ++ from)?
+  if turn_at(network.turns, step) == "L" {
+    Ok(node.left)
+  } else {
+    Ok(node.right)
+  }
+}
+
+fn walk(network: Network, at: Str, step: Int) -> Result[Int, Str] {
+  if at.ends_with("Z") {
+    Ok(step)
+  } else {
+    walk(network, hop(network, at, step)?, step + 1)
+  }
+}
+
+fn gcd(a: Int, b: Int) -> Int {
+  if b == 0 {
+    a
+  } else {
+    gcd(b, a % b)
+  }
+}
+
+/// Dividing before multiplying keeps the running total from overflowing on the
+/// way to an answer that itself fits comfortably.
+fn lcm(a: Int, b: Int) -> Int {
+  a / gcd(a, b) * b
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let network = parse_network(read_lines(sys.fs, path)?)?
+  let starts = Map.keys(network.nodes).filter(fn(name) { name.ends_with("A") })
+  let cycles = starts.try_map(fn(start) { walk(network, start, 0) })?
+  sys.console.print("ghosts on " ++ Int.to_str(starts.len()) ++ " paths, cycles: " ++ cycles.map(Int.to_str).join(" "))
+  sys.console.print("steps until all on Z: " ++ Int.to_str(cycles.fold(1, lcm)))
+  Ok(())
+}

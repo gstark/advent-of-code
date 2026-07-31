@@ -1,0 +1,215 @@
+/// How many button presses before `rx` gets a single low pulse. Neither worked
+/// example has an `rx` at all, so there is nothing here to check against but the
+/// real input.
+///
+/// The answer is in the trillions, so the presses cannot be counted one by one.
+/// `rx` is fed by exactly one conjunction, which sends low only when it remembers
+/// high from every one of its inputs. Each of those inputs turns out to send high
+/// on its own fixed period, so the first press where they coincide is the least
+/// common multiple of those periods.
+///
+/// That is a claim about *this* input and not a general solution — the same shape
+/// of assumption as day 8, and worth naming for the same reason. It needs each
+/// feeder to be periodic from the very first press, with no run-in before the
+/// cycle settles. The program checks what it can: that `rx` has exactly one
+/// feeder, and that the feeder is a conjunction. It cannot check the periodicity,
+/// so the periods it found are printed alongside the answer for inspection.
+///
+/// Order matters — the puzzle is explicit that pulses are handled in the order
+/// they were sent, and the third worked example turns on it. Rather than a queue
+/// with a head taken off it, the pulses are handled a wave at a time: everything
+/// currently in flight, in order, and whatever that sends becomes the next wave.
+/// That is the same order a strict queue would give, because every pulse in one
+/// wave was sent before any pulse in the next.
+///
+/// Advent of Code 2023, day 20, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+/// `kind` is `%` for a flip-flop, `&` for a conjunction, `b` for the broadcaster.
+type Module = { dests: List[Str], kind: Str }
+
+type Pulse = { from: Str, high: Bool, to: Str }
+
+/// Flip-flop on/off by name, and for each conjunction what it last heard from
+/// each of its inputs.
+type Machine = { flips: Map[Str, Bool], memory: Map[Str, Map[Str, Bool]] }
+
+/// `found` records, for each of the feeder's inputs, the press on which it was
+/// first seen sending a high pulse.
+type Counted = { found: Map[Str, Int], machine: Machine }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line.trim() == "" }))
+  }
+}
+
+fn parse_module(line: Str) -> Result[{ module: Module, name: Str }, Str] {
+  let halves = line.split("->")
+  let left = halves.get(0).ok_or("expected `<name> -> <dests>`, got: " ++ line)?.trim()
+  let right = halves.get(1).ok_or("expected `<name> -> <dests>`, got: " ++ line)?
+  let dests = right.split(",").map(fn(dest) { dest.trim() }).reject(fn(dest) { dest == "" })
+  if left.starts_with("%") or left.starts_with("&") {
+    Ok({ module: { dests: dests, kind: left.slice(0, 1) }, name: left.slice(1, left.len()) })
+  } else {
+    Ok({ module: { dests: dests, kind: "b" }, name: left })
+  }
+}
+
+fn parse_machine(lines: List[Str]) -> Result[Map[Str, Module], Str] {
+  Ok(lines.try_map(parse_module)?.fold(Map.empty(), fn(found, entry) {
+    Map.insert(found, entry.name, entry.module)
+  }))
+}
+
+/// A conjunction starts out remembering a low pulse from every input, so its
+/// inputs have to be found before anything runs — they are only visible as other
+/// modules' destinations.
+fn initial(modules: Map[Str, Module]) -> Machine {
+  let memory = Map.keys(modules).fold(Map.empty(), fn(memory, name) {
+    Map.get(modules, name).map(fn(module) {
+      module.dests.fold(memory, fn(inner, dest) {
+        match Map.get(modules, dest) {
+          None => inner
+          Some(target) => if target.kind == "&" {
+            Map.insert(inner, dest, Map.insert(Map.get(inner, dest).unwrap_or(Map.empty()), name, false))
+          } else {
+            inner
+          }
+        }
+      })
+    }).unwrap_or(memory)
+  })
+  { flips: Map.empty(), memory: memory }
+}
+
+/// What one module does with one pulse: the new machine state, and whatever it
+/// sends on. A name with no module behind it — `output`, `rx` — swallows the
+/// pulse.
+fn deliver(modules: Map[Str, Module], machine: Machine, pulse: Pulse) -> { machine: Machine, sent: List[Pulse] }{
+  match Map.get(modules, pulse.to) {
+    None => { machine: machine, sent: [] }
+    Some(module) => {
+      if module.kind == "b" {
+        { machine: machine, sent: module.dests.map(fn(dest) { { from: pulse.to, high: pulse.high, to: dest } }) }
+      } else if module.kind == "%" {
+        if pulse.high {
+          { machine: machine, sent: [] }
+        } else {
+          let turned = not Map.get(machine.flips, pulse.to).unwrap_or(false)
+          {
+            machine: { flips: Map.insert(machine.flips, pulse.to, turned), memory: machine.memory },
+            sent: module.dests.map(fn(dest) { { from: pulse.to, high: turned, to: dest } }),
+          }
+        }
+      } else {
+        let remembered = Map.insert(Map.get(machine.memory, pulse.to).unwrap_or(Map.empty()), pulse.from, pulse.high)
+        let all_high = Map.values(remembered).all(fn(seen) { seen })
+        {
+          machine: { flips: machine.flips, memory: Map.insert(machine.memory, pulse.to, remembered) },
+          sent: module.dests.map(fn(dest) { { from: pulse.to, high: not all_high, to: dest } }),
+        }
+      }
+    }
+  }
+}
+
+/// Watches every pulse for a high one arriving at the feeder, recording the press
+/// it happened on — only the first, since it is the period that is wanted.
+fn watch(found: Map[Str, Int], feeder: Str, at: Int, flying: List[Pulse]) -> Map[Str, Int] {
+  flying.fold(found, fn(seen, pulse) {
+    if pulse.to == feeder and pulse.high and not Map.has(seen, pulse.from) {
+      Map.insert(seen, pulse.from, at)
+    } else {
+      seen
+    }
+  })
+}
+
+fn wave(modules: Map[Str, Module], feeder: Str, at: Int, carried: Counted, flying: List[Pulse]) -> Counted {
+  if flying.is_empty() {
+    carried
+  } else {
+    let stepped = flying.fold({ machine: carried.machine, sent: [] }, fn(state, pulse) {
+      let acted = deliver(modules, state.machine, pulse)
+      { machine: acted.machine, sent: state.sent ++ acted.sent }
+    })
+    let onward = stepped.sent
+    wave(modules, feeder, at, {
+      found: watch(carried.found, feeder, at, onward),
+      machine: stepped.machine,
+    }, onward)
+  }
+}
+
+/// One button press: a single low pulse to the broadcaster, then everything it
+/// sets off.
+fn press(modules: Map[Str, Module], feeder: Str, at: Int, carried: Counted) -> Counted {
+  wave(modules, feeder, at, carried, [{ from: "button", high: false, to: "broadcaster" }])
+}
+
+/// Modules that name `target` among their destinations.
+fn feeding(modules: Map[Str, Module], target: Str) -> List[Str] {
+  Map.keys(modules).filter(fn(name) {
+    Map.get(modules, name).map(fn(module) { module.dests.contains(target) }).unwrap_or(false)
+  })
+}
+
+fn gcd(a: Int, b: Int) -> Int {
+  if b == 0 { a } else { gcd(b, a % b) }
+}
+
+fn lcm(a: Int, b: Int) -> Int {
+  a / gcd(a, b) * b
+}
+
+/// Presses until every one of the feeder's inputs has been caught sending high.
+fn until_found(modules: Map[Str, Module], feeder: Str, wanted: Int, at: Int, limit: Int, carried: Counted) -> Result[Counted, Str] {
+  if Map.len(carried.found) >= wanted {
+    Ok(carried)
+  } else if at > limit {
+    Err("gave up after " ++ Int.to_str(limit) ++ " presses without seeing every feeder go high")
+  } else {
+    until_found(modules, feeder, wanted, at + 1, limit, press(modules, feeder, at, carried))
+  }
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let modules = parse_machine(read_lines(sys.fs, path)?)?
+  let feeders = feeding(modules, "rx")
+  if feeders.len() != 1 {
+    Err("expected exactly one module feeding rx, found " ++ Int.to_str(feeders.len()))
+  } else {
+    let feeder = feeders.first().unwrap_or("")
+    let kind = Map.get(modules, feeder).map(fn(module) { module.kind }).unwrap_or("")
+    if kind != "&" {
+      Err("expected rx to be fed by a conjunction, found kind `" ++ kind ++ "`")
+    } else {
+      let watched = feeding(modules, feeder)
+      let done = until_found(modules, feeder, watched.len(), 1, 100000, { found: Map.empty(), machine: initial(modules) })?
+      let periods = Map.values(done.found)
+      sys.console.print("rx is fed by " ++ feeder ++ " via " ++ Int.to_str(watched.len()) ++ " inputs")
+      sys.console.print("periods: " ++ periods.map(Int.to_str).join(" "))
+      sys.console.print("button presses until rx goes low: " ++ Int.to_str(periods.fold(1, lcm)))
+      Ok(())
+    }
+  }
+}

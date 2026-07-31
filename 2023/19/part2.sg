@@ -1,0 +1,157 @@
+/// Forget the listed parts: each rating runs 1 to 4000, and the question is how
+/// many of the 4000^4 combinations the workflows accept. 167409079868000 on
+/// `sample.txt`.
+///
+/// Two hundred and fifty-six trillion parts cannot be sorted one at a time, so a
+/// whole box of them is sorted at once — a range per rating, starting at 1..4000
+/// on all four. A rule cuts its box in two along one axis: the part that satisfies
+/// the test goes to the rule's destination, the part that fails carries on to the
+/// next rule in the workflow. Neither piece is ever examined again by the other
+/// branch, so no combination is counted twice and none is missed. A box reaching
+/// `A` contributes the product of its four range widths; one reaching `R`, or one
+/// that has been cut down to nothing, contributes zero.
+///
+/// Part 1 walked one part through the workflows; this walks a box through the same
+/// graph, splitting rather than choosing. That the two agree on which parts are
+/// accepted is the whole argument for its correctness.
+///
+/// Advent of Code 2023, day 19, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Rule = { dest: Str, field: Str, above: Bool, value: Int }
+
+/// Inclusive at both ends; `lo > hi` means empty.
+type Span = { hi: Int, lo: Int }
+
+type Box = { a: Span, m: Span, s: Span, x: Span }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_text(fs: Fs, path: Str) -> Result[Str, Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim())
+  }
+}
+
+fn parse_rule(text: Str) -> Result[Rule, Str] {
+  let halves = text.split(":")
+  if halves.len() == 1 {
+    Ok({ dest: text, field: "", above: false, value: 0 })
+  } else {
+    let test = halves.get(0).ok_or("expected `<test>:<dest>`, got: " ++ text)?
+    let dest = halves.get(1).ok_or("expected `<test>:<dest>`, got: " ++ text)?
+    let above = test.contains(">")
+    let sides = test.split(if above { ">" } else { "<" })
+    Ok({
+      dest: dest,
+      field: sides.get(0).ok_or("expected `<field><op><value>`, got: " ++ test)?,
+      above: above,
+      value: Int.parse(sides.get(1).ok_or("expected `<field><op><value>`, got: " ++ test)?)?,
+    })
+  }
+}
+
+fn parse_workflow(line: Str) -> Result[{ name: Str, rules: List[Rule] }, Str] {
+  let halves = line.split("{")
+  let name = halves.get(0).ok_or("expected `<name>{<rules>}`, got: " ++ line)?
+  let body = halves.get(1).ok_or("expected `<name>{<rules>}`, got: " ++ line)?
+  Ok({ name: name, rules: body.replace("}", "").split(",").try_map(parse_rule)? })
+}
+
+fn span_of(box: Box, field: Str) -> Span {
+  if field == "x" {
+    box.x
+  } else if field == "m" {
+    box.m
+  } else if field == "a" {
+    box.a
+  } else {
+    box.s
+  }
+}
+
+fn with_span(box: Box, field: Str, span: Span) -> Box {
+  if field == "x" {
+    { a: box.a, m: box.m, s: box.s, x: span }
+  } else if field == "m" {
+    { a: box.a, m: span, s: box.s, x: box.x }
+  } else if field == "a" {
+    { a: span, m: box.m, s: box.s, x: box.x }
+  } else {
+    { a: box.a, m: box.m, s: span, x: box.x }
+  }
+}
+
+fn width(span: Span) -> Int {
+  Int.max(0, span.hi - span.lo + 1)
+}
+
+fn combinations(box: Box) -> Int {
+  width(box.x) * width(box.m) * width(box.a) * width(box.s)
+}
+
+/// The half of `span` that satisfies the rule, and the half that does not.
+fn split(span: Span, rule: Rule) -> { fails: Span, passes: Span } {
+  if rule.above {
+    { fails: { hi: Int.min(span.hi, rule.value), lo: span.lo }, passes: { hi: span.hi, lo: Int.max(span.lo, rule.value + 1) } }
+  } else {
+    { fails: { hi: span.hi, lo: Int.max(span.lo, rule.value) }, passes: { hi: Int.min(span.hi, rule.value - 1), lo: span.lo } }
+  }
+}
+
+/// Walks the remaining rules of one workflow, carrying the box that has failed
+/// every rule so far. Nothing is left over at the end: the last rule is
+/// unconditional, so the carried box always finds a destination.
+fn through(workflows: Map[Str, List[Rule]], rules: List[Rule], box: Box) -> Result[Int, Str] {
+  match rules.first() {
+    None => Ok(0)
+    Some(rule) => {
+      if rule.field == "" {
+        accepted(workflows, rule.dest, box)
+      } else {
+        let parts = split(span_of(box, rule.field), rule)
+        Ok(accepted(workflows, rule.dest, with_span(box, rule.field, parts.passes))?
+          + through(workflows, rules.drop(1), with_span(box, rule.field, parts.fails))?)
+      }
+    }
+  }
+}
+
+fn accepted(workflows: Map[Str, List[Rule]], name: Str, box: Box) -> Result[Int, Str] {
+  if combinations(box) == 0 {
+    Ok(0)
+  } else if name == "A" {
+    Ok(combinations(box))
+  } else if name == "R" {
+    Ok(0)
+  } else {
+    through(workflows, Map.get(workflows, name).ok_or("no such workflow: " ++ name)?, box)
+  }
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let blocks = read_text(sys.fs, path)?.split("\n\n")
+  let lines = blocks.get(0).ok_or("no workflows")?.split("\n").reject(fn(line) { line.trim() == "" })
+  let parsed = lines.try_map(parse_workflow)?
+  let workflows = parsed.fold(Map.empty(), fn(found, entry) { Map.insert(found, entry.name, entry.rules) })
+  let everything = { a: { hi: 4000, lo: 1 }, m: { hi: 4000, lo: 1 }, s: { hi: 4000, lo: 1 }, x: { hi: 4000, lo: 1 } }
+  sys.console.print("workflows: " ++ Int.to_str(parsed.len()))
+  sys.console.print("accepted combinations: " ++ Int.to_str(accepted(workflows, "in", everything)?))
+  Ok(())
+}

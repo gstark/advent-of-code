@@ -1,0 +1,103 @@
+/// A spin cycle tilts north, then west, then south, then east. Run a billion of
+/// them and weigh the platform: 64 on `sample.txt`.
+///
+/// A billion cycles are not run. The platform has finitely many arrangements and
+/// each cycle is a function of the one before, so once an arrangement repeats the
+/// whole future is fixed: the states before the repeat are a run-in, and
+/// everything after is a loop. Note where the loop starts and how long it is, and
+/// the billionth state is `start + (1000000000 - start) % length` — an index into
+/// the handful of states already seen. In practice the loop turns up inside a
+/// couple of hundred cycles.
+///
+/// Every direction reuses part 1's westward roll: east is west of a mirrored
+/// platform, north and south are west and east of the transposed one.
+///
+/// Advent of Code 2023, day 14, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+/// Where the repeat was found: `start` is the first cycle whose arrangement comes
+/// round again, `length` how many cycles later that happens, and `seen` every
+/// arrangement in order, so the answer can be read straight out of it.
+type Loop = { length: Int, seen: List[List[Str]], start: Int }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn transpose(rows: List[Str]) -> List[Str] {
+  let width = rows.first().unwrap_or("").len()
+  List.range(0, width).map(fn(c) { rows.map(fn(row) { row.slice(c, c + 1) }).join("") })
+}
+
+fn mirror(rows: List[Str]) -> List[Str] {
+  rows.map(fn(row) { row.chars().reverse().join("") })
+}
+
+fn pack(stretch: Str) -> Str {
+  let rocks = stretch.chars().count(fn(square) { square == "O" })
+  "O".repeat(rocks) ++ ".".repeat(stretch.len() - rocks)
+}
+
+fn roll_west(rows: List[Str]) -> List[Str] {
+  rows.map(fn(row) { row.split("#").map(pack).join("#") })
+}
+
+fn roll_east(rows: List[Str]) -> List[Str] {
+  mirror(roll_west(mirror(rows)))
+}
+
+fn spin(rows: List[Str]) -> List[Str] {
+  roll_east(transpose(roll_east(transpose(roll_west(transpose(roll_west(transpose(rows))))))))
+}
+
+fn load(rows: List[Str]) -> Int {
+  let height = rows.len()
+  List.range(0, height).map(fn(r) {
+    (height - r) * rows.get(r).unwrap_or("").chars().count(fn(square) { square == "O" })
+  }).sum()
+}
+
+/// Spins until an arrangement comes round a second time. The arrangement itself
+/// is the key — nothing coarser would do, since two platforms with the same load
+/// are not the same platform and need not have the same future.
+fn find_loop(rows: List[Str], marks: Map[Str, Int], seen: List[List[Str]], step: Int) -> Loop {
+  let key = rows.join("\n")
+  match Map.get(marks, key) {
+    Some(first) => { length: step - first, seen: seen, start: first }
+    None => find_loop(spin(rows), Map.insert(marks, key, step), seen ++ [rows], step + 1)
+  }
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let grid = read_lines(sys.fs, path)?
+  let target = match sys.args.get(1) {
+    None => 1000000000
+    Some(raw) => Int.parse(raw)?
+  }
+  let found = find_loop(grid, Map.empty(), [], 0)
+  let landing = found.start + (target - found.start) % found.length
+  sys.console.print("loop starts at cycle " ++ Int.to_str(found.start) ++ ", length " ++ Int.to_str(found.length))
+  sys.console.print("load after " ++ Int.to_str(target) ++ " cycles: "
+    ++ Int.to_str(load(found.seen.get(landing).unwrap_or(grid))))
+  Ok(())
+}

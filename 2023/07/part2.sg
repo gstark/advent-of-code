@@ -1,0 +1,104 @@
+/// `J` is now a joker: worthless on its own — weaker than `2` — but it counts as
+/// whatever label makes the hand's type strongest. Total winnings become 5905 on
+/// `sample.txt`.
+///
+/// No search over what the jokers should become is needed. Whatever they pretend
+/// to be, the best move is always to join the largest group already there, since
+/// every type improves by making one group bigger and nothing improves by
+/// spreading them out. So: count the non-jokers, add the jokers to the largest
+/// count, and read the type off exactly as part 1 did.
+///
+/// The two rules pull in opposite directions — a joker is strong when typing the
+/// hand and weak when breaking a tie — and the two-part key keeps them apart. The
+/// type letter sees the promoted hand; the card letters see a plain `J` at the
+/// bottom of the order.
+///
+/// Advent of Code 2023, day 7, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Hand = { bid: Int, key: Str }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn letter(index: Int) -> Str {
+  "abcdefghijklm".slice(index, index + 1)
+}
+
+/// `J` has moved to the bottom; the rest keep their order.
+fn card_rank(card: Str) -> Int {
+  Str.index_of("J23456789TQKA", card).unwrap_or(0)
+}
+
+fn type_of(largest: Int, distinct: Int) -> Int {
+  if largest == 5 {
+    6
+  } else if largest == 4 {
+    5
+  } else if largest == 3 {
+    if distinct == 2 { 4 } else { 3 }
+  } else if largest == 2 {
+    if distinct == 3 { 2 } else { 1 }
+  } else {
+    0
+  }
+}
+
+/// Five jokers is the one case with no group to join, and it is five of a kind.
+/// Otherwise the jokers vanish from the tally and reappear on the biggest count,
+/// which leaves `distinct` counting only the real labels — exactly what the type
+/// table wants, since the jokers are no longer a label of their own.
+fn hand_type(cards: Str) -> Int {
+  let real = cards.chars().reject(fn(card) { card == "J" })
+  let jokers = cards.len() - real.len()
+  if jokers == 5 {
+    6
+  } else {
+    let counts = Map.values(real.tally())
+    type_of(counts.max().unwrap_or(0) + jokers, counts.len())
+  }
+}
+
+fn sort_key(cards: Str) -> Str {
+  letter(hand_type(cards)) ++ cards.chars().map(fn(card) { letter(card_rank(card)) }).join("")
+}
+
+fn parse_hand(line: Str) -> Result[Hand, Str] {
+  let parts = line.words()
+  let cards = parts.get(0).ok_or("expected `<cards> <bid>`, got: " ++ line)?
+  Ok({ bid: Int.parse(parts.get(1).ok_or("expected `<cards> <bid>`, got: " ++ line)?)?, key: sort_key(cards) })
+}
+
+fn winnings(hands: List[Hand]) -> Int {
+  let ranked = hands.sort_by(fn(hand) { hand.key })
+  List.range(0, ranked.len()).map(fn(index) {
+    (index + 1) * ranked.get(index).map(fn(hand) { hand.bid }).unwrap_or(0)
+  }).sum()
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let hands = read_lines(sys.fs, path)?.try_map(parse_hand)?
+  sys.console.print("total winnings: " ++ Int.to_str(winnings(hands)))
+  Ok(())
+}

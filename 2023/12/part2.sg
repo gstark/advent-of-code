@@ -1,0 +1,118 @@
+/// The records were folded: each row is really five copies of itself joined by
+/// `?`, with the group list repeated five times to match. `sample.txt` grows from
+/// 21 arrangements to 525152, and one of its rows alone goes from 10 to 506250.
+///
+/// Nothing about the method changes — which is the point of having counted rather
+/// than enumerated in part 1. A row unfolds to about a hundred springs and thirty
+/// groups, so the arrangements run into the billions while the table stays around
+/// three thousand cells.
+///
+/// `f(i, j)` is the number of ways the record from `i` onward can hold the groups
+/// from `j` onward, and it splits on what sits at `i`:
+/// treat it as operational and move to `f(i + 1, j)`, or start group `j` here and
+/// jump past it and its separator to `f(i + group + 1, j + 1)`. A `?` allows both,
+/// a `.` only the first, a `#` only the second.
+///
+/// Sigil has no mutable memo table, so the table is built bottom-up instead: rows
+/// go from `i = n` down to 0, and each row reads only the row below it, which is
+/// already in the `Map` being folded through. That gets memoisation's asymptotics
+/// with no mutation and no recursion.
+///
+/// Advent of Code 2023, day 12, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Record = { groups: List[Int], springs: List[Str] }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line.trim() == "" }))
+  }
+}
+
+fn parse_record(line: Str) -> Result[Record, Str] {
+  let parts = line.words()
+  let springs = parts.get(0).ok_or("expected `<springs> <groups>`, got: " ++ line)?
+  let groups = parts.get(1).ok_or("expected `<springs> <groups>`, got: " ++ line)?
+  let unfolded = List.range(0, 5).map(fn(copy) { springs }).join("?")
+  Ok({
+    groups: List.range(0, 5).flat_map(fn(copy) { groups.split(",") }).try_map(Int.parse)?,
+    springs: unfolded.chars(),
+  })
+}
+
+/// The table is a list of rows with the most recently built at the head, so while
+/// row `i` is being filled the head is row `i + 1` and row `r` sits at index
+/// `r - i - 1`. Indexing a list beats hashing a packed key into a `Map`: on the
+/// real input that alone is the difference between half a minute and a few
+/// seconds.
+fn lookup(rows: List[List[Int]], i: Int, at: Int, j: Int) -> Int {
+  rows.get(at - i - 1).and_then(fn(row) { row.get(j) }).unwrap_or(0)
+}
+
+/// Whether a group of `size` can start at `i`: no known-operational spring inside
+/// it, and it is not immediately followed by a damaged one, which would make the
+/// group longer than claimed. Running off the end is the clean way to finish.
+fn group_fits(springs: List[Str], i: Int, size: Int) -> Bool {
+  let n = springs.len()
+  if i + size > n {
+    false
+  } else {
+    List.range(i, i + size).all(fn(k) { springs.get(k).unwrap_or(".") != "." })
+      and (i + size == n or springs.get(i + size).unwrap_or(".") != "#")
+  }
+}
+
+fn ways(record: Record, rows: List[List[Int]], i: Int, j: Int) -> Int {
+  let n = record.springs.len()
+  let m = record.groups.len()
+  let here = record.springs.get(i).unwrap_or(".")
+  let as_operational = if here == "#" { 0 } else { lookup(rows, i, i + 1, j) }
+  let as_damaged = if here == "." or j >= m {
+    0
+  } else {
+    let size = record.groups.get(j).unwrap_or(0)
+    if group_fits(record.springs, i, size) {
+      lookup(rows, i, Int.min(n, i + size + 1), j + 1)
+    } else {
+      0
+    }
+  }
+  as_operational + as_damaged
+}
+
+/// Row `n` is the base case: having consumed the whole record, there is one
+/// arrangement if every group was placed and none otherwise.
+fn arrangements(record: Record) -> Int {
+  let n = record.springs.len()
+  let m = record.groups.len()
+  let base = [List.range(0, m + 1).map(fn(j) { if j == m { 1 } else { 0 } })]
+  let filled = List.range(0, n).fold(base, fn(rows, step) {
+    let i = n - 1 - step
+    [List.range(0, m + 1).map(fn(j) { ways(record, rows, i, j) })] ++ rows
+  })
+  filled.first().and_then(fn(row) { row.first() }).unwrap_or(0)
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let records = read_lines(sys.fs, path)?.try_map(parse_record)?
+  sys.console.print("sum of arrangements: " ++ Int.to_str(records.map(arrangements).sum()))
+  Ok(())
+}

@@ -1,0 +1,68 @@
+/// There are no points — a card with `n` matches wins one copy of each of the
+/// next `n` cards, and those copies win in turn. Count every card that ends up in
+/// the pile: 30 on `sample.txt`.
+///
+/// The cascade never needs simulating. Cards only ever win cards *below* them, so
+/// one pass in order suffices: by the time card `i` is reached its own count is
+/// final, and it hands that many copies down to the cards it wins. A `Map` holds
+/// the counts, with a missing entry meaning the single original.
+///
+/// Advent of Code 2023, day 4, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn parse_numbers(text: Str) -> Result[List[Int], Str] {
+  text.words().try_map(Int.parse)
+}
+
+fn matches(line: Str) -> Result[Int, Str] {
+  let body = line.split(":").get(1).ok_or("expected `Card <id>: ...`, got: " ++ line)?
+  let halves = body.split("|")
+  let winning = parse_numbers(halves.get(0).ok_or("expected `<winning> | <held>`, got: " ++ line)?)?
+  let held = parse_numbers(halves.get(1).ok_or("expected `<winning> | <held>`, got: " ++ line)?)?
+  Ok(held.count(fn(number) { winning.contains(number) }))
+}
+
+/// Writing card `i`'s own count back before handing copies down keeps every card
+/// present in the map, so the final total is just the sum of its values. The
+/// `Int.min` is the puzzle's promise that no card wins past the end, made good.
+fn pile(won: List[Int]) -> Int {
+  let cards = won.len()
+  let counts = List.range(0, cards).fold(Map.empty(), fn(counts, index) {
+    let copies = Map.get(counts, index).unwrap_or(1)
+    let reach = Int.min(cards, index + 1 + won.get(index).unwrap_or(0))
+    List.range(index + 1, reach).fold(Map.insert(counts, index, copies), fn(inner, next) {
+      Map.insert(inner, next, Map.get(inner, next).unwrap_or(1) + copies)
+    })
+  })
+  Map.values(counts).sum()
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let total = pile(read_lines(sys.fs, path)?.try_map(matches)?)
+  sys.console.print("total scratchcards: " ++ Int.to_str(total))
+  Ok(())
+}

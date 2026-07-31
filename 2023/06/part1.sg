@@ -1,0 +1,83 @@
+/// Hold the button for `h` of the race's `t` milliseconds and the boat travels
+/// `h * (t - h)`. Count the holds that beat the record, multiply across races:
+/// 4 * 8 * 9 = 288 on `sample.txt`.
+///
+/// `h * (t - h)` is a downward parabola, so the winning holds are one unbroken
+/// stretch centred on `t / 2`. Finding where it starts by bisection settles the
+/// whole race — the stretch is symmetric, so the last winning hold is `t` minus
+/// the first. Part 1's numbers are small enough to count by hand; part 2's are
+/// not, and this is the same code.
+///
+/// Advent of Code 2023, day 6, part 1. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Race = { record: Int, time: Int }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn numbers_after_label(line: Str) -> Result[List[Int], Str] {
+  line.split(":").get(1).ok_or("expected `<label>: <numbers>`, got: " ++ line)?.words().try_map(Int.parse)
+}
+
+fn parse_races(lines: List[Str]) -> Result[List[Race], Str] {
+  let times = numbers_after_label(lines.get(0).ok_or("expected a `Time:` line")?)?
+  let records = numbers_after_label(lines.get(1).ok_or("expected a `Distance:` line")?)?
+  Ok(times.zip(records).map(fn(pair) { { record: pair.second, time: pair.first } }))
+}
+
+fn beats(race: Race, hold: Int) -> Bool {
+  hold * (race.time - hold) > race.record
+}
+
+/// The smallest winning hold, given that `hi` wins and `lo - 1` does not.
+fn bisect(race: Race, lo: Int, hi: Int) -> Int {
+  if lo >= hi {
+    lo
+  } else {
+    let mid = (lo + hi) / 2
+    if beats(race, mid) {
+      bisect(race, lo, mid)
+    } else {
+      bisect(race, mid + 1, hi)
+    }
+  }
+}
+
+/// The best hold is the midpoint, so if that one loses, nothing wins.
+fn ways(race: Race) -> Int {
+  let best = race.time / 2
+  if not beats(race, best) {
+    0
+  } else {
+    race.time - 2 * bisect(race, 0, best) + 1
+  }
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let races = parse_races(read_lines(sys.fs, path)?)?
+  let product = races.map(ways).fold(1, fn(total, count) { total * count })
+  sys.console.print("product of ways to win: " ++ Int.to_str(product))
+  Ok(())
+}

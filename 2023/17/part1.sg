@@ -1,0 +1,180 @@
+/// Steer a crucible from the top-left block to the bottom-right, paying each
+/// block's digit as it is entered, never running more than three blocks straight
+/// and never reversing. Least heat loss: 102 on `sample.txt`.
+///
+/// The "at most three straight" rule is not carried in the state. A state here is
+/// just a block plus which *axis* the crucible last travelled along, because the
+/// only thing the next move needs to know is that it must be perpendicular. A move
+/// is then a whole run of one to three blocks in one direction, charged for every
+/// block it crosses. That collapses the search to `width * height * 2` states —
+/// about forty thousand — instead of tracking a run length per state, and the
+/// no-reversing rule enforces itself, since a perpendicular turn cannot reverse.
+///
+/// Dijkstra by buckets rather than a heap: all costs are small integers, so the
+/// frontier is a `Map` from distance to the states waiting at it, worked through
+/// in increasing order. Each bucket is dropped once processed, which matters a
+/// great deal here — see `SIGIL-NOTES.md`, but briefly, `Map.insert` costs time
+/// proportional to the map's size, so the frontier is kept narrow on purpose. The
+/// distance table is bucketed by row for the same reason.
+///
+/// Advent of Code 2023, day 17, part 1. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Grid = { cells: List[List[Int]], height: Int, width: Int }
+
+/// `axis` is 0 when the last run was vertical and 1 when it was horizontal; the
+/// next run must be the other one.
+type State = { axis: Int, c: Int, r: Int }
+
+type Step = { cost: Int, state: State }
+
+/// The frontier, as distance to the states waiting there, alongside the best
+/// distance known for each state.
+type Search = { best: Map[Int, Map[Int, Int]], frontier: Map[Int, List[State]] }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+/// Digits are parsed once into a table. Re-slicing and re-parsing the text on
+/// every block read is the kind of cost that hides well and dominates completely.
+fn Grid.of(rows: List[Str]) -> Result[Grid, Str] {
+  let cells = rows.try_map(fn(row) { row.chars().try_map(Int.parse) })?
+  Ok({ cells: cells, height: rows.len(), width: rows.first().unwrap_or("").len() })
+}
+
+fn heat(grid: Grid, r: Int, c: Int) -> Int {
+  grid.cells.get(r).and_then(fn(row) { row.get(c) }).unwrap_or(0)
+}
+
+fn inside(grid: Grid, r: Int, c: Int) -> Bool {
+  r >= 0 and r < grid.height and c >= 0 and c < grid.width
+}
+
+fn slot(state: State) -> Int {
+  state.c * 2 + state.axis
+}
+
+fn best_of(best: Map[Int, Map[Int, Int]], state: State) -> Option[Int] {
+  Map.get(best, state.r).and_then(fn(row) { Map.get(row, slot(state)) })
+}
+
+fn set_best(best: Map[Int, Map[Int, Int]], state: State, cost: Int) -> Map[Int, Map[Int, Int]] {
+  let row = Map.get(best, state.r).unwrap_or(Map.empty())
+  Map.insert(best, state.r, Map.insert(row, slot(state), cost))
+}
+
+/// One straight run away from `(r, c)`, gathering a move for every legal length.
+/// Heat accumulates block by block, so a four-block run pays for all four.
+fn ray(grid: Grid, r: Int, c: Int, dr: Int, dc: Int, axis: Int, lo: Int, hi: Int, k: Int, paid: Int, found: List[Step]) -> List[Step] {
+  if k > hi {
+    found
+  } else {
+    let nr = r + dr * k
+    let nc = c + dc * k
+    if not inside(grid, nr, nc) {
+      found
+    } else {
+      let running = paid + heat(grid, nr, nc)
+      let gathered = if k >= lo {
+        found.push({ cost: running, state: { axis: axis, c: nc, r: nr } })
+      } else {
+        found
+      }
+      ray(grid, r, c, dr, dc, axis, lo, hi, k + 1, running, gathered)
+    }
+  }
+}
+
+/// Both runs perpendicular to the state's axis, in both directions.
+fn moves(grid: Grid, state: State, lo: Int, hi: Int) -> List[Step] {
+  let turned = 1 - state.axis
+  if turned == 1 {
+    ray(grid, state.r, state.c, 0, 1, turned, lo, hi, 1, 0, [])
+      ++ ray(grid, state.r, state.c, 0, -1, turned, lo, hi, 1, 0, [])
+  } else {
+    ray(grid, state.r, state.c, 1, 0, turned, lo, hi, 1, 0, [])
+      ++ ray(grid, state.r, state.c, -1, 0, turned, lo, hi, 1, 0, [])
+  }
+}
+
+fn offer(search: Search, step: Step, at: Int) -> Search {
+  let reached = at + step.cost
+  let known = best_of(search.best, step.state)
+  if known.map(fn(seen) { seen <= reached }).unwrap_or(false) {
+    search
+  } else {
+    let waiting = Map.get(search.frontier, reached).unwrap_or([])
+    {
+      best: set_best(search.best, step.state, reached),
+      frontier: Map.insert(search.frontier, reached, waiting.push(step.state)),
+    }
+  }
+}
+
+/// A state can be queued more than once and only the first pop is authoritative;
+/// the rest are stale and skipped by comparing against the recorded best.
+fn expand(grid: Grid, search: Search, waiting: List[State], at: Int, lo: Int, hi: Int) -> Search {
+  waiting.fold(search, fn(carried, state) {
+    if best_of(carried.best, state).unwrap_or(0 - 1) != at {
+      carried
+    } else {
+      moves(grid, state, lo, hi).fold(carried, fn(inner, step) { offer(inner, step, at) })
+    }
+  })
+}
+
+/// Distances are worked through in increasing order, so the first time the
+/// bottom-right block turns up in a bucket, that bucket's distance is its answer.
+fn run(grid: Grid, search: Search, at: Int, limit: Int, lo: Int, hi: Int) -> Result[Int, Str] {
+  if at > limit {
+    Err("no route to the factory")
+  } else {
+    match Map.get(search.frontier, at) {
+      None => run(grid, search, at + 1, limit, lo, hi)
+      Some(waiting) => {
+        if waiting.any(fn(state) { state.r == grid.height - 1 and state.c == grid.width - 1 }) {
+          Ok(at)
+        } else {
+          let stepped = expand(grid, { best: search.best, frontier: Map.remove(search.frontier, at) }, waiting, at, lo, hi)
+          run(grid, stepped, at + 1, limit, lo, hi)
+        }
+      }
+    }
+  }
+}
+
+fn least_heat(grid: Grid, lo: Int, hi: Int) -> Result[Int, Str] {
+  let starts = [{ axis: 0, c: 0, r: 0 }, { axis: 1, c: 0, r: 0 }]
+  let search = {
+    best: starts.fold(Map.empty(), fn(best, state) { set_best(best, state, 0) }),
+    frontier: Map.insert(Map.empty(), 0, starts),
+  }
+  run(grid, search, 0, grid.height * grid.width * 9, lo, hi)
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let grid = Grid.of(read_lines(sys.fs, path)?)?
+  sys.console.print("least heat loss: " ++ Int.to_str(least_heat(grid, 1, 3)?))
+  Ok(())
+}

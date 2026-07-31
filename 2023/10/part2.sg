@@ -1,0 +1,129 @@
+/// How many tiles the loop encloses. Junk pipe outside the loop counts as
+/// enclosed if it sits inside, and gaps between parallel pipes do *not* let the
+/// outside leak in — squeezing between them is allowed. Expected: 1 on
+/// `grid1.txt`, 4 on `grid2.txt`, 10 on `grid3.txt`, 8 on `grid4.txt`, 4 on
+/// `grid5.txt`.
+///
+/// The squeezing rule is what makes a flood fill awkward, so this counts instead
+/// of searching. The loop is a simple polygon whose corners are the tiles, so the
+/// shoelace formula gives its area from the path alone. Pick's theorem then turns
+/// area into a tile count: `A = interior + boundary / 2 - 1`, so
+/// `interior = A - boundary / 2 + 1`, with `boundary` the loop length part 1
+/// already computes. No grid is ever marked and nothing is ever flooded — the
+/// path is the whole input to the answer.
+///
+/// The doubled area is carried rather than the area, so the arithmetic stays in
+/// whole numbers until the final halving; a shoelace term is odd as often as not.
+///
+/// The repo's `sample*.txt` carry two extra lines from the Ruby version: `S`'s
+/// shape on top and the expected count at the bottom. `grid1.txt` through
+/// `grid5.txt` are those same grids, plain.
+///
+/// Advent of Code 2023, day 10, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Point = { c: Int, r: Int }
+
+/// What the walk carries: twice the signed shoelace area so far, and how many
+/// tiles of the loop have been stepped on.
+type Trace = { boundary: Int, doubled: Int }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn tile(grid: List[Str], at: Point) -> Str {
+  match grid.get(at.r) {
+    None => "."
+    Some(row) => if at.c < 0 or at.c >= row.len() { "." } else { row.slice(at.c, at.c + 1) }
+  }
+}
+
+fn exits(pipe: Str, at: Point) -> List[Point] {
+  let north = { c: at.c, r: at.r - 1 }
+  let south = { c: at.c, r: at.r + 1 }
+  let east = { c: at.c + 1, r: at.r }
+  let west = { c: at.c - 1, r: at.r }
+  if pipe == "|" {
+    [north, south]
+  } else if pipe == "-" {
+    [east, west]
+  } else if pipe == "L" {
+    [north, east]
+  } else if pipe == "J" {
+    [north, west]
+  } else if pipe == "7" {
+    [south, west]
+  } else if pipe == "F" {
+    [south, east]
+  } else {
+    []
+  }
+}
+
+fn find_start(grid: List[Str]) -> Result[Point, Str] {
+  let found = List.range(0, grid.len()).flat_map(fn(r) {
+    match Str.index_of(grid.get(r).unwrap_or(""), "S") {
+      None => []
+      Some(c) => [{ c: c, r: r }]
+    }
+  })
+  found.first().ok_or("no start tile")
+}
+
+fn loop_ends(grid: List[Str], start: Point) -> List[Point] {
+  [
+    { c: start.c, r: start.r - 1 },
+    { c: start.c, r: start.r + 1 },
+    { c: start.c + 1, r: start.r },
+    { c: start.c - 1, r: start.r },
+  ].filter(fn(at) { exits(tile(grid, at), at).contains(start) })
+}
+
+/// One shoelace term for the edge from `a` to `b`.
+fn cross(a: Point, b: Point) -> Int {
+  a.c * b.r - b.c * a.r
+}
+
+/// Walks the loop once, accumulating the shoelace sum edge by edge. The final
+/// edge back to `start` is added on arrival, which closes the polygon.
+fn walk(grid: List[Str], start: Point, from: Point, at: Point, carried: Trace) -> Result[Trace, Str] {
+  let stepped = { boundary: carried.boundary + 1, doubled: carried.doubled + cross(from, at) }
+  if at == start {
+    Ok(stepped)
+  } else {
+    let onward = exits(tile(grid, at), at).reject(fn(next) { next == from })
+    walk(grid, start, at, onward.first().ok_or("the loop runs into a dead end")?, stepped)
+  }
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let grid = read_lines(sys.fs, path)?
+  let start = find_start(grid)?
+  let first = loop_ends(grid, start).first().ok_or("the start tile connects to nothing")?
+  let traced = walk(grid, start, start, first, { boundary: 0, doubled: 0 })?
+  let area = Int.abs(traced.doubled) / 2
+  sys.console.print("loop length: " ++ Int.to_str(traced.boundary))
+  sys.console.print("enclosed tiles: " ++ Int.to_str(area - traced.boundary / 2 + 1))
+  Ok(())
+}

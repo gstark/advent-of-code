@@ -1,0 +1,92 @@
+/// Empty rows and columns are now a million times larger, not twice. An expanded
+/// grid would be some 140 million squares on a side, which is the point: nothing
+/// is expanded, only the coordinates are.
+///
+/// That makes part 2 the same program as part 1 with a different factor, so the
+/// factor is a second argument — `sigil exec part2.sg -- sample.txt 10` gives
+/// 1030 and `... sample.txt 100` gives 8410, the two checks the puzzle offers for
+/// the scaling itself. Left alone it is the million the puzzle asks for.
+///
+/// Distances need no pathfinding: with only orthogonal steps and no obstacles,
+/// the shortest path between two galaxies is the Manhattan distance, and paths
+/// are allowed to run straight through other galaxies.
+///
+/// Advent of Code 2023, day 11, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Galaxy = { c: Int, r: Int }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn galaxies(grid: List[Str]) -> List[Galaxy] {
+  List.range(0, grid.len()).flat_map(fn(r) {
+    let row = grid.get(r).unwrap_or("")
+    List.range(0, row.len())
+      .filter(fn(c) { row.slice(c, c + 1) == "#" })
+      .map(fn(c) { { c: c, r: r } })
+  })
+}
+
+/// How much each coordinate on one axis shifts: running total of the empty lines
+/// at or before it, each worth `factor - 1` extra.
+fn shifts(occupied: List[Int], extent: Int, factor: Int) -> Map[Int, Int] {
+  List.range(0, extent).fold({ shift: 0, table: Map.empty() }, fn(state, index) {
+    let grown = if occupied.contains(index) { state.shift } else { state.shift + factor - 1 }
+    { shift: grown, table: Map.insert(state.table, index, index + state.shift) }
+  }).table
+}
+
+fn expand(found: List[Galaxy], grid: List[Str], factor: Int) -> List[Galaxy] {
+  let rows = shifts(found.map(fn(galaxy) { galaxy.r }).uniq(), grid.len(), factor)
+  let width = grid.first().unwrap_or("").len()
+  let columns = shifts(found.map(fn(galaxy) { galaxy.c }).uniq(), width, factor)
+  found.map(fn(galaxy) {
+    { c: Map.get(columns, galaxy.c).unwrap_or(galaxy.c), r: Map.get(rows, galaxy.r).unwrap_or(galaxy.r) }
+  })
+}
+
+/// Every pair once: `j` always starts past `i`.
+fn total_distance(found: List[Galaxy]) -> Int {
+  let count = found.len()
+  List.range(0, count).flat_map(fn(i) {
+    let a = found.get(i).unwrap_or({ c: 0, r: 0 })
+    List.range(i + 1, count).map(fn(j) {
+      let b = found.get(j).unwrap_or({ c: 0, r: 0 })
+      Int.abs(a.r - b.r) + Int.abs(a.c - b.c)
+    })
+  }).sum()
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let grid = read_lines(sys.fs, path)?
+  let found = galaxies(grid)
+  let factor = match sys.args.get(1) {
+    None => 1000000
+    Some(raw) => Int.parse(raw)?
+  }
+  sys.console.print("galaxies: " ++ Int.to_str(found.len()) ++ ", expansion factor: " ++ Int.to_str(factor))
+  sys.console.print("sum of distances: " ++ Int.to_str(total_distance(expand(found, grid, factor))))
+  Ok(())
+}

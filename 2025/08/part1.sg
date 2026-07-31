@@ -1,0 +1,142 @@
+/// Junction boxes sit in 3D space, one `x,y,z` per line. Wire together the N
+/// closest pairs — squared Euclidean distance, since ordering needs no square
+/// root — merging circuits as boxes connect, then multiply the sizes of the
+/// three largest circuits. On `sample.txt` that is 5 * 4 * 2 = 40.
+///
+/// Union-find, the way Sigil makes you write it: the disjoint-set forest is
+/// two persistent `Map`s threaded through a fold, and `find` is a tail call.
+///
+/// Advent of Code 2025, day 8. A second implementation beside `part1.rb`, in
+/// Sigil — https://github.com/gstark/sigil — kept here because the two agreeing
+/// on the same input is the only check either of them gets.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Point = { x: Int, y: Int, z: Int }
+
+/// A candidate pair. Sorting a list of these by the structural order is a
+/// distance sort with ties broken by index — but note *why* it is: a record is
+/// compared field by field in **alphabetical** order, not declaration order, and
+/// `dsq` sorts before `i` before `j` by luck rather than by this declaration
+/// (D-066).
+type Pair = { dsq: Int, i: Int, j: Int }
+
+/// Roots map to themselves (by `parent`'s default), and a missing `size`
+/// entry means a circuit of one — so the empty forest needs no seeding.
+type Dsu = { parent: Map[Int, Int], size: Map[Int, Int] }
+
+/// How many of the closest pairs get wired together, when no count is passed:
+/// the puzzle wires ten on its worked example and a thousand on the real input,
+/// and the input is big enough to tell them apart. `part1.rb` picks the same way.
+fn connections_for(points: List[Point]) -> Int {
+  if points.len() > 30 { 1000 } else { 10 }
+}
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn field_at(parts: List[Str], i: Int, line: Str) -> Result[Int, Str] {
+  Int.parse(parts.get(i).ok_or("expected x,y,z but got: " ++ line)?)
+}
+
+fn parse_point(line: Str) -> Result[Point, Str] {
+  let parts = line.split(",")
+  if parts.len() != 3 {
+    Err("expected x,y,z but got: " ++ line)
+  } else {
+    Ok({ x: field_at(parts, 0, line)?, y: field_at(parts, 1, line)?, z: field_at(parts, 2, line)? })
+  }
+}
+
+fn square(n: Int) -> Int {
+  n * n
+}
+
+fn dist_sq(a: Point, b: Point) -> Int {
+  square(a.x - b.x) + square(a.y - b.y) + square(a.z - b.z)
+}
+
+/// Every unordered pair i < j, as a comprehension over the index ranges. The
+/// `get`s cannot miss — `i` and `j` came from `range(0, len)` — and the language
+/// has no way to say so, which is what the `unwrap_or` is paying for.
+fn pairs(points: List[Point]) -> List[Pair] {
+  let n = points.len()
+  let far = { x: 0, y: 0, z: 0 }
+  List.range(0, n).flat_map(fn(i) {
+    let a = points.get(i).unwrap_or(far)
+    List.range(i + 1, n).map(fn(j) {
+      { dsq: dist_sq(a, points.get(j).unwrap_or(far)), i: i, j: j }
+    })
+  })
+}
+
+fn Dsu.fresh() -> Dsu {
+  { parent: Map.empty(), size: Map.empty() }
+}
+
+fn Dsu.find(parent: Map[Int, Int], i: Int) -> Int {
+  let up = Map.get(parent, i).unwrap_or(i)
+  if up == i {
+    i
+  } else {
+    Dsu.find(parent, up)
+  }
+}
+
+/// Union by size keeps every tree shallow, so `Dsu.find` stays cheap even
+/// without path compression — which a persistent map would make awkward.
+fn Dsu.union(dsu: Dsu, a: Int, b: Int) -> Dsu {
+  let root_a = Dsu.find(dsu.parent, a)
+  let root_b = Dsu.find(dsu.parent, b)
+  if root_a == root_b {
+    dsu
+  } else {
+    let size_a = Map.get(dsu.size, root_a).unwrap_or(1)
+    let size_b = Map.get(dsu.size, root_b).unwrap_or(1)
+    if size_a < size_b {
+      { parent: Map.insert(dsu.parent, root_a, root_b), size: Map.insert(dsu.size, root_b, size_a + size_b) }
+    } else {
+      { parent: Map.insert(dsu.parent, root_b, root_a), size: Map.insert(dsu.size, root_a, size_a + size_b) }
+    }
+  }
+}
+
+/// The size of every circuit: each box asks which root it belongs to, and the
+/// answers are counted.
+fn circuit_sizes(dsu: Dsu, n: Int) -> List[Int] {
+  let counts = List.range(0, n).map(fn(i) { Dsu.find(dsu.parent, i) }).tally()
+  Map.values(counts).sort_by(fn(size) { 0 - size })
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let points = read_lines(sys.fs, path)?.try_map(parse_point)?
+  let connections = match sys.args.get(1) {
+    None => connections_for(points)
+    Some(raw) => Int.parse(raw)?
+  }
+  let closest = pairs(points).sorted().take(connections)
+  let wired = closest.fold(Dsu.fresh(), fn(dsu, pair) { Dsu.union(dsu, pair.i, pair.j) })
+  let sizes = circuit_sizes(wired, points.len())
+  sys.console.print("circuit sizes: " ++ sizes.map(fn(s) { Int.to_str(s) }).join(" "))
+  sys.console.print("three largest multiplied: " ++ Int.to_str(sizes.take(3).fold(1, fn(product, size) { product * size })))
+  Ok(())
+}

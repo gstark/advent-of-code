@@ -1,0 +1,127 @@
+/// A gear is a `*` touching exactly two part numbers, and its ratio is those two
+/// multiplied. Sum every gear's ratio: on `sample.txt` that is 467 * 35 plus
+/// 598 * 755, or 467835. The `*` beside 617 touches only one number and is not a
+/// gear.
+///
+/// Part 1 asked which numbers a symbol reaches, so it indexed the symbols. This
+/// asks which numbers a `*` reaches, so it indexes the other way: every cell a
+/// digit run covers maps to that run's position in the list. Looking up the eight
+/// neighbours of a `*` and taking the distinct hits identifies the numbers it
+/// touches — by index, so a run spanning three cells is still counted once, and
+/// two different runs that happen to share a value stay distinct.
+///
+/// Advent of Code 2023, day 3, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Num = { hi: Int, lo: Int, row: Int, value: Int }
+
+type Scan = { digits: Str, out: List[Num], start: Int }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn is_digit(character: Str) -> Bool {
+  Result.is_ok(Int.parse(character))
+}
+
+fn key(row: Int, col: Int) -> Int {
+  row * 1000 + col
+}
+
+fn Scan.flush(scan: Scan, row: Int, col: Int) -> Scan {
+  if scan.start == -1 {
+    scan
+  } else {
+    let found = { hi: col - 1, lo: scan.start, row: row, value: Int.parse(scan.digits).unwrap_or(0) }
+    { digits: "", out: scan.out.push(found), start: -1 }
+  }
+}
+
+fn row_numbers(row: Int, line: Str) -> List[Num] {
+  let characters = line.chars()
+  let width = characters.len()
+  let scanned = List.range(0, width + 1).fold({ digits: "", out: [], start: -1 }, fn(scan, col) {
+    let character = characters.get(col).unwrap_or(".")
+    if is_digit(character) {
+      if scan.start == -1 {
+        { digits: character, out: scan.out, start: col }
+      } else {
+        { digits: scan.digits ++ character, out: scan.out, start: scan.start }
+      }
+    } else {
+      Scan.flush(scan, row, col)
+    }
+  })
+  scanned.out
+}
+
+fn numbers(lines: List[Str]) -> List[Num] {
+  List.range(0, lines.len()).flat_map(fn(row) { row_numbers(row, lines.get(row).unwrap_or("")) })
+}
+
+/// Every cell a run covers, mapped to that run's index in `found`.
+fn number_cells(found: List[Num]) -> Map[Int, Int] {
+  List.range(0, found.len()).fold(Map.empty(), fn(cells, index) {
+    match found.get(index) {
+      None => cells
+      Some(number) => List.range(number.lo, number.hi + 1).fold(cells, fn(inner, col) {
+        Map.insert(inner, key(number.row, col), index)
+      })
+    }
+  })
+}
+
+fn stars(lines: List[Str]) -> List[Int] {
+  List.range(0, lines.len()).flat_map(fn(row) {
+    let characters = lines.get(row).unwrap_or("").chars()
+    List.range(0, characters.len())
+      .filter(fn(col) { characters.get(col).unwrap_or(".") == "*" })
+      .map(fn(col) { key(row, col) })
+  })
+}
+
+fn neighbours(at: Int) -> List[Int] {
+  List.range(-1, 2).flat_map(fn(row) { List.range(-1, 2).map(fn(col) { at + row * 1000 + col }) })
+}
+
+/// The ratio of a `*`, or nothing when it does not touch exactly two runs.
+fn ratio(cells: Map[Int, Int], found: List[Num], at: Int) -> Option[Int] {
+  let touching = neighbours(at).flat_map(fn(cell) { Option.to_list(Map.get(cells, cell)) }).uniq()
+  if touching.len() == 2 {
+    Some(touching.fold(1, fn(product, index) {
+      product * found.get(index).map(fn(number) { number.value }).unwrap_or(1)
+    }))
+  } else {
+    None
+  }
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let lines = read_lines(sys.fs, path)?
+  let found = numbers(lines)
+  let cells = number_cells(found)
+  let total = stars(lines).flat_map(fn(at) { Option.to_list(ratio(cells, found, at)) }).sum()
+  sys.console.print("sum of gear ratios: " ++ Int.to_str(total))
+  Ok(())
+}

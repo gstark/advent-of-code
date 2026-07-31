@@ -1,0 +1,178 @@
+/// The beam may enter from any edge tile, heading inward. Find the entry that
+/// lights the most tiles: 51 on `sample.txt`, from the fourth tile of the top row
+/// heading down — more than the 46 part 1's top-left entry manages.
+///
+/// Every edge entry is simply tried; there are only about four hundred, and each
+/// one is a fresh walk. Nothing carries over between them, because a state's
+/// reachable set depends on where the beam came from.
+///
+/// Splitters make the beam a set of beams, and mirrors make it loop, so the search
+/// is over `(tile, direction)` states rather than tiles. A state already visited
+/// produces exactly what it produced last time, so revisiting it can be dropped —
+/// that is what stops the loops, and it is the only thing that does. The answer
+/// then counts distinct *tiles* among the visited states, since one tile lit from
+/// two directions is still one tile.
+///
+/// Directions are numbered north, east, south, west, which makes both mirrors
+/// arithmetic: `/` swaps each direction with its neighbour in the cycle, and `\`
+/// reflects the numbering about its middle. Naming the four cases twice would be
+/// no clearer than saying it once.
+///
+/// Advent of Code 2023, day 16, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+/// `d` is 0 north, 1 east, 2 south, 3 west — the compass, clockwise.
+type Beam = { c: Int, d: Int, r: Int }
+
+/// The rows with their extent alongside. Carrying the width rather than asking
+/// the first row for its length each time matters: `mark` runs once per beam per
+/// step, and a `List.first` plus a `Str.len` inside it is most of the work.
+type Grid = { height: Int, rows: List[Str], width: Int }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn Grid.of(rows: List[Str]) -> Grid {
+  { height: rows.len(), rows: rows, width: rows.first().unwrap_or("").len() }
+}
+
+fn tile(grid: Grid, beam: Beam) -> Str {
+  match grid.rows.get(beam.r) {
+    None => "."
+    Some(row) => row.slice(beam.c, beam.c + 1)
+  }
+}
+
+fn inside(grid: Grid, beam: Beam) -> Bool {
+  beam.r >= 0 and beam.r < grid.height and beam.c >= 0 and beam.c < grid.width
+}
+
+/// North and south are even, east and west odd, so `/` pairs 0 with 1 and 2 with
+/// 3 — swap each direction with its partner.
+fn bounce_slash(d: Int) -> Int {
+  if d % 2 == 0 { d + 1 } else { d - 1 }
+}
+
+/// `\` pairs north with west and east with south, which is the numbering read
+/// backwards.
+fn bounce_backslash(d: Int) -> Int {
+  3 - d
+}
+
+/// Which way the beam leaves this tile. A splitter hit end-on is empty space; hit
+/// side-on it becomes two beams.
+fn onward(square: Str, d: Int) -> List[Int] {
+  if square == "/" {
+    [bounce_slash(d)]
+  } else if square == "\\" {
+    [bounce_backslash(d)]
+  } else if square == "|" and d % 2 == 1 {
+    [0, 2]
+  } else if square == "-" and d % 2 == 0 {
+    [1, 3]
+  } else {
+    [d]
+  }
+}
+
+fn advance(beam: Beam, d: Int) -> Beam {
+  if d == 0 {
+    { c: beam.c, d: d, r: beam.r - 1 }
+  } else if d == 1 {
+    { c: beam.c + 1, d: d, r: beam.r }
+  } else if d == 2 {
+    { c: beam.c, d: d, r: beam.r + 1 }
+  } else {
+    { c: beam.c - 1, d: d, r: beam.r }
+  }
+}
+
+/// Where a beam sits within its row: column and heading packed together.
+fn mark(beam: Beam) -> Int {
+  beam.c * 4 + beam.d
+}
+
+/// Visited states, bucketed by row.
+///
+/// One flat `Map` would be the obvious thing, and it is what this did first — but
+/// `Map.insert` costs time proportional to the map's size rather than its depth,
+/// so a single 48000-entry set spends all its time copying. Keeping one small map
+/// per row caps every insert at a row's worth of states and takes the walk from
+/// 1.4 seconds to a tenth of that, which is what makes part 2's 440 starts
+/// tractable at all.
+fn visited(seen: Map[Int, Map[Int, Bool]], beam: Beam) -> Bool {
+  match Map.get(seen, beam.r) {
+    None => false
+    Some(row) => Map.has(row, mark(beam))
+  }
+}
+
+fn visit(seen: Map[Int, Map[Int, Bool]], beam: Beam) -> Map[Int, Map[Int, Bool]] {
+  let row = Map.get(seen, beam.r).unwrap_or(Map.empty())
+  Map.insert(seen, beam.r, Map.insert(row, mark(beam), true))
+}
+
+/// Takes one beam off the stack, marks wherever it goes next, and pushes those.
+/// A state is marked as it is pushed, so it is never pushed twice and the stack
+/// drains once every reachable state has been reached — which it must, there
+/// being finitely many.
+fn trace(grid: Grid, stack: List[Beam], seen: Map[Int, Map[Int, Bool]]) -> Map[Int, Map[Int, Bool]] {
+  match stack.first() {
+    None => seen
+    Some(beam) => {
+      let fresh = onward(tile(grid, beam), beam.d)
+        .map(fn(d) { advance(beam, d) })
+        .filter(fn(next) { inside(grid, next) and not visited(seen, next) })
+      trace(grid, fresh ++ stack.drop(1), fresh.fold(seen, visit))
+    }
+  }
+}
+
+/// Distinct tiles, not distinct states: a tile lit from two directions is one
+/// tile, so each row's states are reduced to the columns they name.
+fn energised(grid: Grid, start: Beam) -> Int {
+  let seen = trace(grid, [start], visit(Map.empty(), start))
+  Map.values(seen).map(fn(row) {
+    Map.len(Map.keys(row).fold(Map.empty(), fn(columns, state) { Map.insert(columns, state / 4, true) }))
+  }).sum()
+}
+
+/// Every way in: down the left edge heading east, down the right edge heading
+/// west, along the top heading south, along the bottom heading north.
+fn entries(grid: Grid) -> List[Beam] {
+  List.range(0, grid.height).flat_map(fn(r) {
+    [{ c: 0, d: 1, r: r }, { c: grid.width - 1, d: 3, r: r }]
+  }) ++ List.range(0, grid.width).flat_map(fn(c) {
+    [{ c: c, d: 2, r: 0 }, { c: c, d: 0, r: grid.height - 1 }]
+  })
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let grid = Grid.of(read_lines(sys.fs, path)?)
+  let starts = entries(grid)
+  let best = starts.map(fn(start) { energised(grid, start) }).max()
+  sys.console.print("entries tried: " ++ Int.to_str(starts.len()))
+  sys.console.print("best energised tiles: " ++ Int.to_str(best.ok_or("no entry points")?))
+  Ok(())
+}

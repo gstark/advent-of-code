@@ -1,0 +1,122 @@
+/// The `seeds:` line was never a list of seeds — it is pairs of start and
+/// length, describing ranges. On the real input that is billions of seeds, so
+/// they cannot be walked one at a time. The lowest location is 46 on
+/// `sample.txt`, from seed 82.
+///
+/// Ranges go through the layers instead of numbers. A rule either misses an
+/// interval entirely or cuts a piece out of it, and that piece is the only part
+/// the rule shifts — the leftovers on either side are handed back to the same
+/// rule list to be matched by some other rule, or by none, which is the identity.
+/// Each layer turns a list of intervals into a slightly longer list of intervals,
+/// and the answer is the smallest `lo` at the end. A few dozen intervals do the
+/// work of a few billion seeds.
+///
+/// Advent of Code 2023, day 5, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Rule = { dst: Int, len: Int, src: Int }
+
+/// Half-open: `lo` is in the interval, `hi` is not. Half-open ranges make the
+/// splitting arithmetic below free of the off-by-ones the inclusive form invites.
+type Interval = { hi: Int, lo: Int }
+
+type Almanac = { layers: List[List[Rule]], seeds: List[Int] }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_text(fs: Fs, path: Str) -> Result[Str, Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim())
+  }
+}
+
+fn parse_numbers(text: Str) -> Result[List[Int], Str] {
+  text.words().try_map(Int.parse)
+}
+
+fn parse_rule(line: Str) -> Result[Rule, Str] {
+  let parts = line.words().try_map(Int.parse)?
+  if parts.len() != 3 {
+    Err("expected `<dst> <src> <len>`, got: " ++ line)
+  } else {
+    Ok({
+      dst: parts.get(0).unwrap_or(0),
+      len: parts.get(2).unwrap_or(0),
+      src: parts.get(1).unwrap_or(0),
+    })
+  }
+}
+
+fn parse_layer(block: Str) -> Result[List[Rule], Str] {
+  block.trim().lines().drop(1).reject(fn(line) { line.trim() == "" }).try_map(parse_rule)
+}
+
+fn parse_almanac(text: Str) -> Result[Almanac, Str] {
+  let blocks = text.split("\n\n")
+  let head = blocks.get(0).ok_or("empty almanac")?
+  let seeds = head.split(":").get(1).ok_or("expected a `seeds:` line, got: " ++ head)?
+  Ok({ layers: blocks.drop(1).try_map(parse_layer)?, seeds: parse_numbers(seeds)? })
+}
+
+/// The seed line read the way part 2 reads it: start and length, in pairs.
+fn seed_intervals(seeds: List[Int]) -> List[Interval] {
+  seeds.slices(2).flat_map(fn(pair) {
+    match pair.get(0) {
+      None => []
+      Some(start) => [{ hi: start + pair.get(1).unwrap_or(0), lo: start }]
+    }
+  })
+}
+
+fn overlaps(rule: Rule, span: Interval) -> Bool {
+  Int.max(span.lo, rule.src) < Int.min(span.hi, rule.src + rule.len)
+}
+
+/// Splits an interval across the rules. The recursion terminates because the
+/// leftovers handed back are strictly smaller than what came in, and cannot match
+/// the rule that produced them.
+fn map_interval(rules: List[Rule], span: Interval) -> List[Interval] {
+  if span.lo >= span.hi {
+    []
+  } else {
+    match List.find(rules, fn(rule) { overlaps(rule, span) }) {
+      None => [span]
+      Some(rule) => {
+        let lo = Int.max(span.lo, rule.src)
+        let hi = Int.min(span.hi, rule.src + rule.len)
+        let shift = rule.dst - rule.src
+        [{ hi: hi + shift, lo: lo + shift }]
+          ++ map_interval(rules, { hi: lo, lo: span.lo })
+          ++ map_interval(rules, { hi: span.hi, lo: hi })
+      }
+    }
+  }
+}
+
+fn map_layer(spans: List[Interval], rules: List[Rule]) -> List[Interval] {
+  spans.flat_map(fn(span) { map_interval(rules, span) })
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let almanac = parse_almanac(read_text(sys.fs, path)?)?
+  let located = almanac.layers.fold(seed_intervals(almanac.seeds), map_layer)
+  let lowest = located.map(fn(span) { span.lo }).min()
+  sys.console.print("lowest location: " ++ Int.to_str(lowest.ok_or("no seeds")?))
+  Ok(())
+}

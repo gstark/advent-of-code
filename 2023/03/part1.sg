@@ -1,0 +1,119 @@
+/// The engine schematic is a grid of numbers, dots, and symbols. A number is a
+/// part number when any of the eight cells around it holds a symbol — anything
+/// that is neither a dot nor a digit. Sum the part numbers: on `sample.txt`,
+/// everything but 114 and 58 qualifies, and the total is 4361.
+///
+/// Numbers span several columns, so the unit of work is a digit *run*, not a
+/// cell. `row_numbers` folds across one row carrying a partial run, and reads one
+/// column past the end so a number touching the right edge still gets flushed.
+///
+/// Symbols go into a `Map` keyed by packed coordinate rather than a list, which
+/// turns "is anything next to this number" from a scan of every symbol into a
+/// handful of lookups.
+///
+/// Advent of Code 2023, day 3, part 1. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+/// A digit run: the columns `lo` through `hi` inclusive of one row.
+type Num = { hi: Int, lo: Int, row: Int, value: Int }
+
+/// The state `row_numbers` folds: `start` is -1 when no run is open.
+type Scan = { digits: Str, out: List[Num], start: Int }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn is_digit(character: Str) -> Bool {
+  Result.is_ok(Int.parse(character))
+}
+
+/// Packs a coordinate into one `Int` so a `Map` can be keyed by position. The
+/// grid is far narrower than 1000, and out-of-bounds coordinates simply produce
+/// keys nothing was ever stored under.
+fn key(row: Int, col: Int) -> Int {
+  row * 1000 + col
+}
+
+fn Scan.flush(scan: Scan, row: Int, col: Int) -> Scan {
+  if scan.start == -1 {
+    scan
+  } else {
+    let found = { hi: col - 1, lo: scan.start, row: row, value: Int.parse(scan.digits).unwrap_or(0) }
+    { digits: "", out: scan.out.push(found), start: -1 }
+  }
+}
+
+/// Reading column `width` — one past the end — yields a dot, which flushes any
+/// run still open when the row ends.
+fn row_numbers(row: Int, line: Str) -> List[Num] {
+  let characters = line.chars()
+  let width = characters.len()
+  let scanned = List.range(0, width + 1).fold({ digits: "", out: [], start: -1 }, fn(scan, col) {
+    let character = characters.get(col).unwrap_or(".")
+    if is_digit(character) {
+      if scan.start == -1 {
+        { digits: character, out: scan.out, start: col }
+      } else {
+        { digits: scan.digits ++ character, out: scan.out, start: scan.start }
+      }
+    } else {
+      Scan.flush(scan, row, col)
+    }
+  })
+  scanned.out
+}
+
+fn numbers(lines: List[Str]) -> List[Num] {
+  List.range(0, lines.len()).flat_map(fn(row) { row_numbers(row, lines.get(row).unwrap_or("")) })
+}
+
+fn symbol_cells(lines: List[Str]) -> Map[Int, Str] {
+  List.range(0, lines.len()).fold(Map.empty(), fn(cells, row) {
+    let characters = lines.get(row).unwrap_or("").chars()
+    List.range(0, characters.len()).fold(cells, fn(inner, col) {
+      let character = characters.get(col).unwrap_or(".")
+      if character == "." or is_digit(character) {
+        inner
+      } else {
+        Map.insert(inner, key(row, col), character)
+      }
+    })
+  })
+}
+
+/// Every cell in the box around a run, its own cells included — those hold
+/// digits, so they can never be mistaken for a symbol.
+fn ring(found: Num) -> List[Int] {
+  List.range(found.row - 1, found.row + 2).flat_map(fn(row) {
+    List.range(found.lo - 1, found.hi + 2).map(fn(col) { key(row, col) })
+  })
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let lines = read_lines(sys.fs, path)?
+  let cells = symbol_cells(lines)
+  let parts = numbers(lines).filter(fn(found) { ring(found).any(fn(at) { Map.has(cells, at) }) })
+  sys.console.print("sum of part numbers: " ++ Int.to_str(parts.map(fn(found) { found.value }).sum()))
+  Ok(())
+}

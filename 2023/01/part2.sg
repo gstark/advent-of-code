@@ -1,0 +1,82 @@
+/// The same calibration document, but `one` through `nine` spelled out count as
+/// digits too. On `sample2.txt` the seven lines give 29, 83, 13, 24, 42, 14, 76
+/// — 281 in total.
+///
+/// The trap is `eightwothree`, where `eight` and `two` share the `t`. Reading a
+/// value at *every* index and never consuming the characters it matched sidesteps
+/// it: overlapping spellings both get seen, because nothing is ever eaten.
+///
+/// Advent of Code 2023, day 1, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+/// A spelling and the digit it stands for. Pairing them in a record beats
+/// indexing a list of words, which would need a sentinel that matches nothing to
+/// stand in for a `get` that cannot miss.
+type Word = { text: Str, value: Int }
+
+const WORDS: List[Word] = [
+  { text: "one", value: 1 },
+  { text: "two", value: 2 },
+  { text: "three", value: 3 },
+  { text: "four", value: 4 },
+  { text: "five", value: 5 },
+  { text: "six", value: 6 },
+  { text: "seven", value: 7 },
+  { text: "eight", value: 8 },
+  { text: "nine", value: 9 },
+]
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn spelled(rest: Str) -> Option[Int] {
+  List.find(WORDS, fn(word) { rest.starts_with(word.text) }).map(fn(word) { word.value })
+}
+
+/// What the line reads as at this index — a bare digit if one sits there, else a
+/// spelling that starts there, else nothing.
+fn value_at(line: Str, index: Int) -> Option[Int] {
+  let rest = line.slice(index, line.len())
+  match Result.ok(Int.parse(rest.slice(0, 1))) {
+    Some(digit) => Some(digit)
+    None => spelled(rest)
+  }
+}
+
+fn values(line: Str) -> List[Int] {
+  List.range(0, line.len()).flat_map(fn(index) { Option.to_list(value_at(line, index)) })
+}
+
+fn calibration(line: Str) -> Result[Int, Str] {
+  let found = values(line)
+  let first = found.first().ok_or("no digit on line: " ++ line)?
+  let last = found.last().ok_or("no digit on line: " ++ line)?
+  Ok(first * 10 + last)
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let total = read_lines(sys.fs, path)?.try_map(calibration)?.sum()
+  sys.console.print("sum of calibration values: " ++ Int.to_str(total))
+  Ok(())
+}

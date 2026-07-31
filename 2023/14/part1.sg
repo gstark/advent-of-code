@@ -1,0 +1,73 @@
+/// Round rocks (`O`) roll until they hit a cube rock (`#`), a rock already come to
+/// rest, or the edge; cube rocks never move. Tilt the platform north and weigh it:
+/// a rock in the top row of an `n`-row platform is worth `n`, the next row `n - 1`,
+/// and so on. 136 on `sample.txt`.
+///
+/// Rolling is done a row at a time, westward, by cutting the row at its `#`s and
+/// repacking each piece: a piece with three `O`s in it becomes three `O`s followed
+/// by dots, whatever order they arrived in. Splitting on `#` and joining back with
+/// `#` puts the cube rocks back exactly where they were, so the barriers need no
+/// special handling at all.
+///
+/// North is then west of the transposed platform. Part 2 needs all four
+/// directions and gets them the same way, which is why the roll is written
+/// sideways here rather than as a northward scan.
+///
+/// Advent of Code 2023, day 14, part 1. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn transpose(rows: List[Str]) -> List[Str] {
+  let width = rows.first().unwrap_or("").len()
+  List.range(0, width).map(fn(c) { rows.map(fn(row) { row.slice(c, c + 1) }).join("") })
+}
+
+/// One stretch between cube rocks, with its round rocks slid to the front.
+fn pack(stretch: Str) -> Str {
+  let rocks = stretch.chars().count(fn(square) { square == "O" })
+  "O".repeat(rocks) ++ ".".repeat(stretch.len() - rocks)
+}
+
+fn roll_west(rows: List[Str]) -> List[Str] {
+  rows.map(fn(row) { row.split("#").map(pack).join("#") })
+}
+
+fn roll_north(rows: List[Str]) -> List[Str] {
+  transpose(roll_west(transpose(rows)))
+}
+
+fn load(rows: List[Str]) -> Int {
+  let height = rows.len()
+  List.range(0, height).map(fn(r) {
+    (height - r) * rows.get(r).unwrap_or("").chars().count(fn(square) { square == "O" })
+  }).sum()
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let grid = read_lines(sys.fs, path)?
+  sys.console.print("load on the north beams: " ++ Int.to_str(load(roll_north(grid))))
+  Ok(())
+}

@@ -1,0 +1,88 @@
+/// A line of `L`/`R` turns, repeated forever, and a network of three-letter
+/// nodes each naming a left and a right successor. Count the steps from `AAA` to
+/// `ZZZ`: 2 on `sample.txt`, 6 on `sample2.txt` where the instructions have to
+/// wrap around twice.
+///
+/// Advent of Code 2023, day 8, part 1. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Node = { left: Str, right: Str }
+
+type Network = { nodes: Map[Str, Node], turns: Str }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line.trim() == "" }))
+  }
+}
+
+fn parse_node(line: Str) -> Result[{ name: Str, node: Node }, Str] {
+  let halves = line.split("=")
+  let name = halves.get(0).ok_or("expected `<name> = (<left>, <right>)`, got: " ++ line)?.trim()
+  let body = halves.get(1).ok_or("expected `<name> = (<left>, <right>)`, got: " ++ line)?
+  let pair = body.replace("(", "").replace(")", "").split(",")
+  Ok({
+    name: name,
+    node: {
+      left: pair.get(0).ok_or("expected two successors, got: " ++ line)?.trim(),
+      right: pair.get(1).ok_or("expected two successors, got: " ++ line)?.trim(),
+    },
+  })
+}
+
+fn parse_network(lines: List[Str]) -> Result[Network, Str] {
+  let turns = lines.first().ok_or("expected a line of turns")?
+  let parsed = lines.drop(1).try_map(parse_node)?
+  Ok({
+    nodes: parsed.fold(Map.empty(), fn(nodes, entry) { Map.insert(nodes, entry.name, entry.node) }),
+    turns: turns.trim(),
+  })
+}
+
+/// The instructions repeat forever, so the step count indexes into them modulo
+/// their length — there is no need to build the infinite sequence.
+fn turn_at(turns: Str, step: Int) -> Str {
+  let index = step % turns.len()
+  turns.slice(index, index + 1)
+}
+
+fn hop(network: Network, from: Str, step: Int) -> Result[Str, Str] {
+  let node = Map.get(network.nodes, from).ok_or("no such node: " ++ from)?
+  if turn_at(network.turns, step) == "L" {
+    Ok(node.left)
+  } else {
+    Ok(node.right)
+  }
+}
+
+fn walk(network: Network, at: Str, step: Int) -> Result[Int, Str] {
+  if at == "ZZZ" {
+    Ok(step)
+  } else {
+    walk(network, hop(network, at, step)?, step + 1)
+  }
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let network = parse_network(read_lines(sys.fs, path)?)?
+  sys.console.print("steps to ZZZ: " ++ Int.to_str(walk(network, "AAA", 0)?))
+  Ok(())
+}

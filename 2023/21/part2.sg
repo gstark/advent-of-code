@@ -1,0 +1,180 @@
+/// The map repeats infinitely in every direction, and the Elf takes 26501365
+/// steps. On `sample.txt` the published counts are 16 in 6 steps, 50 in 10,
+/// 1594 in 50 and 6536 in 100 — all four of which this reproduces directly, which
+/// is what the wrapping is checked against.
+///
+/// 26501365 steps cannot be swept. But 26501365 = 65 + 202300 * 131, where 131 is
+/// the map's width and 65 the distance from `S` to its edge, and the real input
+/// has an empty row and column through `S` and an empty border. So the reachable
+/// region grows as a diamond that gains one identical ring of tiles every 131
+/// steps, and the count is a quadratic in the number of rings. Three sweeps — at
+/// 65, 196 and 327 steps — pin that quadratic down, and it is evaluated at ring
+/// 202300.
+///
+/// That is a claim about *this* input's shape, not a general solution, and it is
+/// the third such assumption in the set after days 8 and 20. The program checks
+/// what it can — square map, odd width, `S` centred, target offset landing exactly
+/// on the half-width — and refuses rather than guessing if any of it fails. It
+/// cannot check that the rows through `S` and the border are clear, so the three
+/// sweep counts and both differences are printed for inspection: if the second
+/// difference is not constant, the quadratic does not hold and the answer is
+/// wrong.
+///
+/// Anything up to ten thousand steps is swept directly instead, so the sample's
+/// published numbers remain a live check on the wrapping itself — the part the
+/// extrapolation is built on top of and cannot verify.
+///
+/// "Exactly `n` steps" is not the same as "within `n` steps", but it nearly is:
+/// a plot reachable in `k` steps is reachable in `k + 2` as well, by stepping off
+/// and back. So every plot whose distance is at most `n` and has the same parity
+/// as `n` is reachable in exactly `n`, and no other is. One breadth-first sweep
+/// counting by parity answers it — there is no need to track which plots are
+/// occupied at each step.
+///
+/// Advent of Code 2023, day 21, part 2. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+type Plot = { c: Int, r: Int }
+
+type Grid = { height: Int, rows: List[Str], width: Int }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+fn Grid.of(rows: List[Str]) -> Grid {
+  { height: rows.len(), rows: rows, width: rows.first().unwrap_or("").len() }
+}
+
+/// The map repeats, so coordinates wrap. `%` follows the sign of the dividend, so
+/// a plain remainder goes negative to the north and west; adding the extent back
+/// before the second remainder gives the floored modulo this needs.
+fn wrap(value: Int, extent: Int) -> Int {
+  (value % extent + extent) % extent
+}
+
+fn tile(grid: Grid, at: Plot) -> Str {
+  match grid.rows.get(wrap(at.r, grid.height)) {
+    None => "#"
+    Some(row) => row.slice(wrap(at.c, grid.width), wrap(at.c, grid.width) + 1)
+  }
+}
+
+fn start_of(grid: Grid) -> Result[Plot, Str] {
+  List.range(0, grid.height).flat_map(fn(r) {
+    match Str.index_of(grid.rows.get(r).unwrap_or(""), "S") {
+      None => []
+      Some(c) => [{ c: c, r: r }]
+    }
+  }).first().ok_or("no starting position")
+}
+
+fn neighbours(at: Plot) -> List[Plot] {
+  [
+    { c: at.c, r: at.r - 1 },
+    { c: at.c, r: at.r + 1 },
+    { c: at.c + 1, r: at.r },
+    { c: at.c - 1, r: at.r },
+  ]
+}
+
+/// Visited plots are bucketed by row: one flat map would grow large enough that
+/// its insert cost dominates. See `SIGIL-NOTES.md`.
+fn seen_at(seen: Map[Int, Map[Int, Bool]], at: Plot) -> Bool {
+  Map.get(seen, at.r).map(fn(row) { Map.has(row, at.c) }).unwrap_or(false)
+}
+
+fn mark(seen: Map[Int, Map[Int, Bool]], at: Plot) -> Map[Int, Map[Int, Bool]] {
+  Map.insert(seen, at.r, Map.insert(Map.get(seen, at.r).unwrap_or(Map.empty()), at.c, true))
+}
+
+/// Sweeps outward, counting the plots whose distance matches the target parity.
+/// Marking each plot as it is accepted doubles as the deduplicator — two
+/// neighbours of the frontier that land on the same plot cannot both pass, since
+/// the first marks it. That avoids `List.uniq`, which is quadratic; see
+/// `SIGIL-NOTES.md`.
+fn sweep(grid: Grid, frontier: List[Plot], seen: Map[Int, Map[Int, Bool]], step: Int, steps: Int, reached: Int) -> Int {
+  if step > steps or frontier.is_empty() {
+    reached
+  } else {
+    let stepped = frontier.flat_map(neighbours).fold({ fresh: [], seen: seen }, fn(state, at) {
+      if tile(grid, at) == "#" or seen_at(state.seen, at) {
+        state
+      } else {
+        { fresh: state.fresh.push(at), seen: mark(state.seen, at) }
+      }
+    })
+    let counted = if (step + 1) % 2 == steps % 2 { reached + stepped.fresh.len() } else { reached }
+    sweep(grid, stepped.fresh, stepped.seen, step + 1, steps, counted)
+  }
+}
+
+fn reachable(grid: Grid, from: Plot, steps: Int) -> Int {
+  let seeded = if steps % 2 == 0 { 1 } else { 0 }
+  sweep(grid, [from], mark(Map.empty(), from), 0, steps, seeded)
+}
+
+/// Fits the quadratic through the three ring counts and reads off ring `n`.
+/// Written as first and second differences rather than as coefficients, so the
+/// numbers being trusted are the ones printed.
+fn extrapolate(first: Int, second: Int, third: Int, n: Int) -> Int {
+  let step = second - first
+  let curve = (third - second) - step
+  first + n * step + n * (n - 1) / 2 * curve
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let steps = match sys.args.get(1) {
+    None => 26501365
+    Some(raw) => Int.parse(raw)?
+  }
+  let grid = Grid.of(read_lines(sys.fs, path)?)
+  let start = start_of(grid)?
+  let half = grid.width / 2
+  if steps <= 10000 {
+    sys.console.print("plots reachable in exactly " ++ Int.to_str(steps) ++ " steps: "
+      ++ Int.to_str(reachable(grid, start, steps)))
+    Ok(())
+  } else if grid.width != grid.height {
+    Err("extrapolation needs a square map, got " ++ Int.to_str(grid.width) ++ "x" ++ Int.to_str(grid.height))
+  } else if grid.width % 2 == 0 {
+    Err("extrapolation needs an odd width, got " ++ Int.to_str(grid.width))
+  } else if start.r != half or start.c != half {
+    Err("extrapolation needs S at the centre of the map")
+  } else if steps % grid.width != half {
+    Err("extrapolation needs the target to land on a ring boundary, but "
+      ++ Int.to_str(steps) ++ " % " ++ Int.to_str(grid.width) ++ " is "
+      ++ Int.to_str(steps % grid.width) ++ ", not " ++ Int.to_str(half))
+  } else {
+    let counts = List.range(0, 3).map(fn(ring) { reachable(grid, start, half + ring * grid.width) })
+    let first = counts.get(0).unwrap_or(0)
+    let second = counts.get(1).unwrap_or(0)
+    let third = counts.get(2).unwrap_or(0)
+    sys.console.print("ring counts: " ++ counts.map(Int.to_str).join(" "))
+    sys.console.print("differences: " ++ Int.to_str(second - first) ++ " " ++ Int.to_str(third - second)
+      ++ ", second difference: " ++ Int.to_str((third - second) - (second - first)))
+    sys.console.print("plots reachable in exactly " ++ Int.to_str(steps) ++ " steps: "
+      ++ Int.to_str(extrapolate(first, second, third, steps / grid.width)))
+    Ok(())
+  }
+}

@@ -1,0 +1,18 @@
+type Console = { print: fn(Str) -> Unit }
+type Sys = { console: Console, args: List[Str] }
+
+fn b_tally(n: Int) -> Int { Map.len(List.range(0, n).tally()) }
+fn b_from_list(n: Int) -> Int {
+  Map.len(Map.from_list(List.range(0, n).map(fn(i) { { key: i, value: i } })))
+}
+fn b_group_by(n: Int) -> Int { Map.len(List.range(0, n).group_by(fn(i) { i })) }
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let n = Int.parse(sys.args.first().unwrap_or("1000"))?
+  let w = sys.args.get(1).unwrap_or("tally")
+  let out = if w == "from_list" { b_from_list(n) }
+    else if w == "group_by" { b_group_by(n) }
+    else { b_tally(n) }
+  sys.console.print(w ++ " " ++ Int.to_str(n) ++ " -> " ++ Int.to_str(out))
+  Ok(())
+}

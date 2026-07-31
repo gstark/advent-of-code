@@ -1,0 +1,45 @@
+/// HASH folds a string down to one byte: per character, add its ASCII code,
+/// multiply by 17, keep the remainder modulo 256. Sum the hash of every
+/// comma-separated step: 1320 on `sample.txt`.
+///
+/// Advent of Code 2023, day 15, part 1. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+/// The sequence is one long line, but the file ends with a newline and may have
+/// been wrapped, so every line break is dropped before splitting on commas.
+fn read_steps(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.replace("\n", "").trim().split(",").reject(fn(step) { step == "" }))
+  }
+}
+
+fn hash(text: Str) -> Int {
+  text.chars().fold(0, fn(value, character) {
+    (value + Str.code_of(character).unwrap_or(0)) * 17 % 256
+  })
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let steps = read_steps(sys.fs, path)?
+  sys.console.print("steps: " ++ Int.to_str(steps.len()))
+  sys.console.print("sum of hashes: " ++ Int.to_str(steps.map(hash).sum()))
+  Ok(())
+}

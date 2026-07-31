@@ -1,0 +1,55 @@
+/// Each line of the calibration document hides a two-digit number: its first
+/// digit and its last digit, in that order. Sum them. On `sample.txt` the four
+/// lines give 12, 38, 15, 77 — 142 in total.
+///
+/// Advent of Code 2023, day 1, part 1. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+  }
+}
+
+/// `Int.parse` is the digit test: a single character either names an integer or
+/// it does not, and the failure is exactly the "not a digit" answer wanted here.
+fn digit_of(character: Str) -> Option[Int] {
+  Result.ok(Int.parse(character))
+}
+
+fn digits(line: Str) -> List[Int] {
+  line.chars().flat_map(fn(character) { Option.to_list(digit_of(character)) })
+}
+
+/// A line with no digit at all is an error rather than a zero — the puzzle
+/// promises one, so a line without one means the input was misread.
+fn calibration(line: Str) -> Result[Int, Str] {
+  let found = digits(line)
+  let first = found.first().ok_or("no digit on line: " ++ line)?
+  let last = found.last().ok_or("no digit on line: " ++ line)?
+  Ok(first * 10 + last)
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let total = read_lines(sys.fs, path)?.try_map(calibration)?.sum()
+  sys.console.print("sum of calibration values: " ++ Int.to_str(total))
+  Ok(())
+}

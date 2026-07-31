@@ -1,0 +1,88 @@
+/// Each pattern reflects across one line, either between two rows or between two
+/// columns. Score a horizontal line as 100 times the rows above it and a vertical
+/// line as the columns to its left: 5 + 400 = 405 on `sample.txt`.
+///
+/// Rather than testing whether a fold is perfect, this counts how many characters
+/// disagree across it. Part 1 wants the fold with zero disagreements; part 2 wants
+/// the one with exactly one, which is the smudge. Same search, different target —
+/// so `smudges` is the whole of both solutions and the two files differ by one
+/// digit.
+///
+/// A vertical fold is a horizontal fold of the transposed pattern, so only one
+/// direction is ever implemented.
+///
+/// Advent of Code 2023, day 13, part 1. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_text(fs: Fs, path: Str) -> Result[Str, Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim())
+  }
+}
+
+fn parse_pattern(block: Str) -> List[Str] {
+  block.trim().split("\n").reject(fn(line) { line == "" })
+}
+
+/// Columns become rows, so one fold-finder serves both directions.
+fn transpose(rows: List[Str]) -> List[Str] {
+  let width = rows.first().unwrap_or("").len()
+  List.range(0, width).map(fn(c) {
+    rows.map(fn(row) { row.slice(c, c + 1) }).join("")
+  })
+}
+
+fn differences(a: Str, b: Str) -> Int {
+  List.range(0, Int.min(a.len(), b.len())).count(fn(i) { a.slice(i, i + 1) != b.slice(i, i + 1) })
+}
+
+/// How many characters disagree across a fold between rows `above - 1` and
+/// `above`. Rows that would reflect off the end of the pattern have nothing to
+/// disagree with and are skipped, which is what lets an off-centre fold count.
+fn smudges(rows: List[Str], above: Int) -> Int {
+  let reach = Int.min(above, rows.len() - above)
+  List.range(0, reach).map(fn(step) {
+    differences(rows.get(above - 1 - step).unwrap_or(""), rows.get(above + step).unwrap_or(""))
+  }).sum()
+}
+
+/// The fold with exactly `wanted` disagreements, as a count of rows above it.
+fn fold_at(rows: List[Str], wanted: Int) -> Option[Int] {
+  List.range(1, rows.len()).find(fn(above) { smudges(rows, above) == wanted })
+}
+
+fn summarise(rows: List[Str], wanted: Int) -> Result[Int, Str] {
+  match fold_at(rows, wanted) {
+    Some(above) => Ok(100 * above)
+    None => match fold_at(transpose(rows), wanted) {
+      Some(left) => Ok(left)
+      None => Err("no line of reflection in:\n" ++ rows.join("\n"))
+    }
+  }
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let patterns = read_text(sys.fs, path)?.split("\n\n").map(parse_pattern)
+  let total = patterns.try_map(fn(rows) { summarise(rows, 0) })?.sum()
+  sys.console.print("patterns: " ++ Int.to_str(patterns.len()))
+  sys.console.print("summary: " ++ Int.to_str(total))
+  Ok(())
+}

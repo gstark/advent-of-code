@@ -1,0 +1,126 @@
+/// Parts rated `x`, `m`, `a`, `s` are fed through named workflows until one
+/// accepts or rejects them. Sum every rating of every accepted part: 19114 on
+/// `sample.txt`.
+///
+/// Advent of Code 2023, day 19, part 1. A Sigil implementation —
+/// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
+type Console = { print: fn(Str) -> Unit }
+
+type FsErr =
+  | Denied(path: Str)
+  | NotFound(path: Str)
+
+type Fs = { read: fn(Str) -> Result[Str, FsErr] }
+
+type Sys = { console: Console, fs: Fs, args: List[Str] }
+
+/// A rule with an empty `field` is the workflow's unconditional last resort.
+type Rule = { dest: Str, field: Str, above: Bool, value: Int }
+
+type Part = { a: Int, m: Int, s: Int, x: Int }
+
+fn fs_message(error: FsErr) -> Str {
+  match error {
+    Denied(path) => "denied " ++ path
+    NotFound(path) => "not found " ++ path
+  }
+}
+
+fn read_text(fs: Fs, path: Str) -> Result[Str, Str] {
+  match fs.read(path) {
+    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
+    Ok(text) => Ok(text.trim())
+  }
+}
+
+fn parse_rule(text: Str) -> Result[Rule, Str] {
+  let halves = text.split(":")
+  if halves.len() == 1 {
+    Ok({ dest: text, field: "", above: false, value: 0 })
+  } else {
+    let test = halves.get(0).ok_or("expected `<test>:<dest>`, got: " ++ text)?
+    let dest = halves.get(1).ok_or("expected `<test>:<dest>`, got: " ++ text)?
+    let above = test.contains(">")
+    let sides = test.split(if above { ">" } else { "<" })
+    Ok({
+      dest: dest,
+      field: sides.get(0).ok_or("expected `<field><op><value>`, got: " ++ test)?,
+      above: above,
+      value: Int.parse(sides.get(1).ok_or("expected `<field><op><value>`, got: " ++ test)?)?,
+    })
+  }
+}
+
+fn parse_workflow(line: Str) -> Result[{ name: Str, rules: List[Rule] }, Str] {
+  let halves = line.split("{")
+  let name = halves.get(0).ok_or("expected `<name>{<rules>}`, got: " ++ line)?
+  let body = halves.get(1).ok_or("expected `<name>{<rules>}`, got: " ++ line)?
+  Ok({ name: name, rules: body.replace("}", "").split(",").try_map(parse_rule)? })
+}
+
+fn field_value(text: Str) -> Result[Int, Str] {
+  Int.parse(text.split("=").get(1).ok_or("expected `<field>=<value>`, got: " ++ text)?)
+}
+
+fn parse_part(line: Str) -> Result[Part, Str] {
+  let fields = line.replace("{", "").replace("}", "").split(",")
+  Ok({
+    a: field_value(fields.get(2).ok_or("expected four ratings, got: " ++ line)?)?,
+    m: field_value(fields.get(1).ok_or("expected four ratings, got: " ++ line)?)?,
+    s: field_value(fields.get(3).ok_or("expected four ratings, got: " ++ line)?)?,
+    x: field_value(fields.get(0).ok_or("expected four ratings, got: " ++ line)?)?,
+  })
+}
+
+/// Fields are named by a letter in the input, and a record cannot be indexed by
+/// a string, so the four cases are spelled out once here.
+fn rating(part: Part, field: Str) -> Int {
+  if field == "x" {
+    part.x
+  } else if field == "m" {
+    part.m
+  } else if field == "a" {
+    part.a
+  } else {
+    part.s
+  }
+}
+
+fn matches(rule: Rule, part: Part) -> Bool {
+  if rule.field == "" {
+    true
+  } else if rule.above {
+    rating(part, rule.field) > rule.value
+  } else {
+    rating(part, rule.field) < rule.value
+  }
+}
+
+/// Follows the part from workflow to workflow. Every workflow ends in an
+/// unconditional rule, so some rule always matches.
+fn sort_part(workflows: Map[Str, List[Rule]], name: Str, part: Part) -> Result[Bool, Str] {
+  if name == "A" {
+    Ok(true)
+  } else if name == "R" {
+    Ok(false)
+  } else {
+    let rules = Map.get(workflows, name).ok_or("no such workflow: " ++ name)?
+    let rule = List.find(rules, fn(rule) { matches(rule, part) }).ok_or("no rule matched in: " ++ name)?
+    sort_part(workflows, rule.dest, part)
+  }
+}
+
+fn main(sys: Sys) -> Result[Unit, Str] {
+  let path = sys.args.first().unwrap_or("input.txt")
+  let blocks = read_text(sys.fs, path)?.split("\n\n")
+  let lines = blocks.get(0).ok_or("no workflows")?.split("\n").reject(fn(line) { line.trim() == "" })
+  let parsed = lines.try_map(parse_workflow)?
+  let workflows = parsed.fold(Map.empty(), fn(found, entry) { Map.insert(found, entry.name, entry.rules) })
+  let parts = blocks.get(1).ok_or("no parts")?.split("\n").reject(fn(line) { line.trim() == "" }).try_map(parse_part)?
+  let accepted = parts.try_map(fn(part) {
+    sort_part(workflows, "in", part).map(fn(taken) { if taken { part.x + part.m + part.a + part.s } else { 0 } })
+  })?
+  sys.console.print("parts: " ++ Int.to_str(parts.len()) ++ ", workflows: " ++ Int.to_str(parsed.len()))
+  sys.console.print("sum of accepted ratings: " ++ Int.to_str(accepted.sum()))
+  Ok(())
+}
