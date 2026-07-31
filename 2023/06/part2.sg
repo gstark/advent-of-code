@@ -30,15 +30,14 @@ fn fs_message(error: FsErr) -> Str {
 fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
   match fs.read(path) {
     Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
+    Ok(text) => Ok(text.lines().reject(Str.is_empty))
   }
 }
 
 /// Closing up the gaps is the whole of part 2's rule change: the digits after the
 /// label, joined, are the number.
 fn number_after_label(line: Str) -> Result[Int, Str] {
-  let body = line.split(":").get(1).ok_or("expected `<label>: <numbers>`, got: " ++ line)?
-  Int.parse(body.words().join(""))
+  Int.parse(line.split(":").get(1).ok_or("expected `<label>: <numbers>`, got: " ++ line)?.words().join(""))
 }
 
 fn parse_race(lines: List[Str]) -> Result[Race, Str] {

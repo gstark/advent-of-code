@@ -36,12 +36,13 @@ fn parse_numbers(text: Str) -> Result[List[Int], Str] {
 }
 
 /// How many of the held numbers are winners. The card's own id is not needed for
-/// part 1 — the cards are scored where they lie.
+/// part 1 — the cards are scored where they lie. Rewriting the `:` as a `|` cuts
+/// the line into its three fields in one split.
 fn matches(line: Str) -> Result[Int, Str] {
-  let body = line.split(":").get(1).ok_or("expected `Card <id>: ...`, got: " ++ line)?
-  let halves = body.split("|")
-  let winning = parse_numbers(halves.get(0).ok_or("expected `<winning> | <held>`, got: " ++ line)?)?
-  let held = parse_numbers(halves.get(1).ok_or("expected `<winning> | <held>`, got: " ++ line)?)?
+  let fields = line.replace(":", "|").split("|")
+  let malformed = "expected `Card <id>: <winning> | <held>`, got: " ++ line
+  let winning = parse_numbers(fields.get(1).ok_or(malformed)?)?
+  let held = parse_numbers(fields.get(2).ok_or(malformed)?)?
   Ok(held.count(fn(number) { winning.contains(number) }))
 }
 

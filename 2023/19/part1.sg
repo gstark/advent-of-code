@@ -17,8 +17,6 @@ type Sys = { console: Console, fs: Fs, args: List[Str] }
 /// A rule with an empty `field` is the workflow's unconditional last resort.
 type Rule = { dest: Str, field: Str, above: Bool, value: Int }
 
-type Part = { a: Int, m: Int, s: Int, x: Int }
-
 fn fs_message(error: FsErr) -> Str {
   match error {
     Denied(path) => "denied " ++ path
@@ -38,67 +36,57 @@ fn parse_rule(text: Str) -> Result[Rule, Str] {
   if halves.len() == 1 {
     Ok({ dest: text, field: "", above: false, value: 0 })
   } else {
-    let test = halves.get(0).ok_or("expected `<test>:<dest>`, got: " ++ text)?
-    let dest = halves.get(1).ok_or("expected `<test>:<dest>`, got: " ++ text)?
+    let bad = "expected `<test>:<dest>`, got: " ++ text
+    let test = halves.get(0).ok_or(bad)?
     let above = test.contains(">")
     let sides = test.split(if above { ">" } else { "<" })
+    let malformed = "expected `<field><op><value>`, got: " ++ test
     Ok({
-      dest: dest,
-      field: sides.get(0).ok_or("expected `<field><op><value>`, got: " ++ test)?,
+      dest: halves.get(1).ok_or(bad)?,
+      field: sides.get(0).ok_or(malformed)?,
       above: above,
-      value: Int.parse(sides.get(1).ok_or("expected `<field><op><value>`, got: " ++ test)?)?,
+      value: Int.parse(sides.get(1).ok_or(malformed)?)?,
     })
   }
 }
 
 fn parse_workflow(line: Str) -> Result[{ name: Str, rules: List[Rule] }, Str] {
-  let halves = line.split("{")
-  let name = halves.get(0).ok_or("expected `<name>{<rules>}`, got: " ++ line)?
-  let body = halves.get(1).ok_or("expected `<name>{<rules>}`, got: " ++ line)?
-  Ok({ name: name, rules: body.replace("}", "").split(",").try_map(parse_rule)? })
-}
-
-fn field_value(text: Str) -> Result[Int, Str] {
-  Int.parse(text.split("=").get(1).ok_or("expected `<field>=<value>`, got: " ++ text)?)
-}
-
-fn parse_part(line: Str) -> Result[Part, Str] {
-  let fields = line.replace("{", "").replace("}", "").split(",")
+  let bad = "expected `<name>{<rules>}`, got: " ++ line
+  let halves = line.strip_suffix("}").ok_or(bad)?.split("{")
   Ok({
-    a: field_value(fields.get(2).ok_or("expected four ratings, got: " ++ line)?)?,
-    m: field_value(fields.get(1).ok_or("expected four ratings, got: " ++ line)?)?,
-    s: field_value(fields.get(3).ok_or("expected four ratings, got: " ++ line)?)?,
-    x: field_value(fields.get(0).ok_or("expected four ratings, got: " ++ line)?)?,
+    name: halves.get(0).ok_or(bad)?,
+    rules: halves.get(1).ok_or(bad)?.split(",").try_map(parse_rule)?,
   })
 }
 
-/// Fields are named by a letter in the input, and a record cannot be indexed by
-/// a string, so the four cases are spelled out once here.
-fn rating(part: Part, field: Str) -> Int {
-  if field == "x" {
-    part.x
-  } else if field == "m" {
-    part.m
-  } else if field == "a" {
-    part.a
-  } else {
-    part.s
-  }
+fn parse_rating(text: Str) -> Result[{ key: Str, value: Int }, Str] {
+  let halves = text.split("=")
+  let bad = "expected `<field>=<value>`, got: " ++ text
+  Ok({ key: halves.get(0).ok_or(bad)?, value: Int.parse(halves.get(1).ok_or(bad)?)? })
 }
 
-fn matches(rule: Rule, part: Part) -> Bool {
+/// A part is its four ratings keyed by field name. A record would need the four
+/// cases spelled out to look up the field a rule tests, since a record cannot be
+/// indexed by a string; a map is indexed by exactly the letter the input names.
+fn parse_part(line: Str) -> Result[Map[Str, Int], Str] {
+  let bad = "expected `{<field>=<value>,...}`, got: " ++ line
+  let body = line.strip_prefix("{").ok_or(bad)?.strip_suffix("}").ok_or(bad)?
+  Ok(Map.from_list(body.split(",").try_map(parse_rating)?))
+}
+
+fn matches(rule: Rule, part: Map[Str, Int]) -> Bool {
   if rule.field == "" {
     true
   } else if rule.above {
-    rating(part, rule.field) > rule.value
+    Map.get_or(part, rule.field, 0) > rule.value
   } else {
-    rating(part, rule.field) < rule.value
+    Map.get_or(part, rule.field, 0) < rule.value
   }
 }
 
 /// Follows the part from workflow to workflow. Every workflow ends in an
 /// unconditional rule, so some rule always matches.
-fn sort_part(workflows: Map[Str, List[Rule]], name: Str, part: Part) -> Result[Bool, Str] {
+fn sort_part(workflows: Map[Str, List[Rule]], name: Str, part: Map[Str, Int]) -> Result[Bool, Str] {
   if name == "A" {
     Ok(true)
   } else if name == "R" {
@@ -118,7 +106,7 @@ fn main(sys: Sys) -> Result[Unit, Str] {
   let workflows = parsed.fold(Map.empty(), fn(found, entry) { Map.insert(found, entry.name, entry.rules) })
   let parts = blocks.get(1).ok_or("no parts")?.split("\n").reject(fn(line) { line.trim() == "" }).try_map(parse_part)?
   let accepted = parts.try_map(fn(part) {
-    sort_part(workflows, "in", part).map(fn(taken) { if taken { part.x + part.m + part.a + part.s } else { 0 } })
+    sort_part(workflows, "in", part).map(fn(taken) { if taken { Map.values(part).sum() } else { 0 } })
   })?
   sys.console.print("parts: " ++ Int.to_str(parts.len()) ++ ", workflows: " ++ Int.to_str(parsed.len()))
   sys.console.print("sum of accepted ratings: " ++ Int.to_str(accepted.sum()))

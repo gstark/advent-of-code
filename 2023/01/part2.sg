@@ -57,14 +57,11 @@ fn spelled(rest: Str) -> Option[Int] {
 /// spelling that starts there, else nothing.
 fn value_at(line: Str, index: Int) -> Option[Int] {
   let rest = line.slice(index, line.len())
-  match Result.ok(Int.parse(rest.slice(0, 1))) {
-    Some(digit) => Some(digit)
-    None => spelled(rest)
-  }
+  Result.ok(Int.parse(rest.slice(0, 1))).or_else(fn() { spelled(rest) })
 }
 
 fn values(line: Str) -> List[Int] {
-  List.range(0, line.len()).flat_map(fn(index) { Option.to_list(value_at(line, index)) })
+  List.range(0, line.len()).map(fn(index) { value_at(line, index) }).compact()
 }
 
 fn calibration(line: Str) -> Result[Int, Str] {

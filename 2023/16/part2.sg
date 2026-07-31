@@ -7,11 +7,13 @@
 /// reachable set depends on where the beam came from.
 ///
 /// Splitters make the beam a set of beams, and mirrors make it loop, so the search
-/// is over `(tile, direction)` states rather than tiles. A state already visited
-/// produces exactly what it produced last time, so revisiting it can be dropped —
-/// that is what stops the loops, and it is the only thing that does. The answer
-/// then counts distinct *tiles* among the visited states, since one tile lit from
-/// two directions is still one tile.
+/// is over `(tile, direction)` states rather than tiles. Only a mirror or splitter
+/// can branch a beam or turn it, though, so only those states are worth naming:
+/// empty space is slid through in one go, lighting the tiles it passes. A mirror
+/// state already visited produces exactly what it produced last time, so revisiting
+/// it can be dropped — that is what stops the loops, and since a loop has to turn
+/// somewhere to close, it is enough. The answer counts distinct *tiles*, since one
+/// tile lit from two directions is still one tile.
 ///
 /// Directions are numbered north, east, south, west, which makes both mirrors
 /// arithmetic: `/` swaps each direction with its neighbour in the cycle, and `\`
@@ -34,8 +36,8 @@ type Sys = { console: Console, fs: Fs, args: List[Str] }
 type Beam = { c: Int, d: Int, r: Int }
 
 /// The rows with their extent alongside. Carrying the width rather than asking
-/// the first row for its length each time matters: `mark` runs once per beam per
-/// step, and a `List.first` plus a `Str.len` inside it is most of the work.
+/// the first row for its length each time matters: `inside` runs once per tile
+/// slid over, and a `List.first` plus a `Str.len` inside it is most of the work.
 type Grid = { height: Int, rows: List[Str], width: Int }
 
 fn fs_message(error: FsErr) -> Str {
@@ -108,53 +110,101 @@ fn advance(beam: Beam, d: Int) -> Beam {
 }
 
 /// Where a beam sits within its row: column and heading packed together.
+///
+/// Both sets below are a map of small maps keyed by row, rather than one flat map
+/// of everything. `Map.insert` costs time proportional to the map's size rather
+/// than its depth, so a flat set spends all its time copying: a row's worth of
+/// entries per insert instead of the whole grid's is what makes part 2's 440
+/// starts tractable.
 fn mark(beam: Beam) -> Int {
   beam.c * 4 + beam.d
 }
 
-/// Visited states, bucketed by row.
-///
-/// One flat `Map` would be the obvious thing, and it is what this did first — but
-/// `Map.insert` costs time proportional to the map's size rather than its depth,
-/// so a single 48000-entry set spends all its time copying. Keeping one small map
-/// per row caps every insert at a row's worth of states and takes the walk from
-/// 1.4 seconds to a tenth of that, which is what makes part 2's 440 starts
-/// tractable at all.
-fn visited(seen: Map[Int, Map[Int, Bool]], beam: Beam) -> Bool {
+fn seen_has(seen: Map[Int, Map[Int, Bool]], beam: Beam) -> Bool {
   match Map.get(seen, beam.r) {
     None => false
     Some(row) => Map.has(row, mark(beam))
   }
 }
 
-fn visit(seen: Map[Int, Map[Int, Bool]], beam: Beam) -> Map[Int, Map[Int, Bool]] {
+fn seen_add(seen: Map[Int, Map[Int, Bool]], beam: Beam) -> Map[Int, Map[Int, Bool]] {
   let row = Map.get(seen, beam.r).unwrap_or(Map.empty())
   Map.insert(seen, beam.r, Map.insert(row, mark(beam), true))
 }
 
-/// Takes one beam off the stack, marks wherever it goes next, and pushes those.
-/// A state is marked as it is pushed, so it is never pushed twice and the stack
-/// drains once every reachable state has been reached — which it must, there
-/// being finitely many.
-fn trace(grid: Grid, stack: List[Beam], seen: Map[Int, Map[Int, Bool]]) -> Map[Int, Map[Int, Bool]] {
-  match stack.first() {
-    None => seen
-    Some(beam) => {
-      let fresh = onward(tile(grid, beam), beam.d)
-        .map(fn(d) { advance(beam, d) })
-        .filter(fn(next) { inside(grid, next) and not visited(seen, next) })
-      trace(grid, fresh ++ stack.drop(1), fresh.fold(seen, visit))
+/// Lit tiles need no heading, so these are keyed by column alone. Re-lighting a
+/// tile is the common case and must not pay for an insert.
+fn light(lit: Map[Int, Map[Int, Bool]], beam: Beam) -> Map[Int, Map[Int, Bool]] {
+  let row = Map.get(lit, beam.r).unwrap_or(Map.empty())
+  if Map.has(row, beam.c) {
+    lit
+  } else {
+    Map.insert(lit, beam.r, Map.insert(row, beam.c, true))
+  }
+}
+
+/// How far one straight run got: the tiles it lit, and the mirror or splitter it
+/// stopped on, if it stopped rather than left the grid.
+type Step = { lit: Map[Int, Map[Int, Bool]], stop: Option[Beam] }
+
+/// Empty space cannot turn a beam, so a run of `.` is one slide rather than one
+/// step per tile.
+fn slide(grid: Grid, beam: Beam, lit: Map[Int, Map[Int, Bool]]) -> Step {
+  if not inside(grid, beam) {
+    { lit: lit, stop: None }
+  } else {
+    let marked = light(lit, beam)
+    if tile(grid, beam) == "." {
+      slide(grid, advance(beam, beam.d), marked)
+    } else {
+      { lit: marked, stop: Some(beam) }
     }
   }
 }
 
-/// Distinct tiles, not distinct states: a tile lit from two directions is one
-/// tile, so each row's states are reduced to the columns they name.
+/// Takes one mirror off the stack, slides away along each way out, and pushes
+/// whatever mirrors those runs land on. A state is marked as it is pushed, so it
+/// is never pushed twice and the stack drains once every reachable mirror has
+/// been reached — which it must, there being finitely many.
+fn trace(
+  grid: Grid,
+  stack: List[Beam],
+  seen: Map[Int, Map[Int, Bool]],
+  lit: Map[Int, Map[Int, Bool]],
+) -> Map[Int, Map[Int, Bool]] {
+  match stack.first() {
+    None => lit
+    Some(beam) => {
+      let next = onward(tile(grid, beam), beam.d).fold(
+        { lit: lit, seen: seen, stack: stack.drop(1) },
+        fn(acc, d) {
+          let step = slide(grid, advance(beam, d), acc.lit)
+          match step.stop {
+            None => { lit: step.lit, seen: acc.seen, stack: acc.stack }
+            Some(hit) => {
+              if seen_has(acc.seen, hit) {
+                { lit: step.lit, seen: acc.seen, stack: acc.stack }
+              } else {
+                { lit: step.lit, seen: seen_add(acc.seen, hit), stack: acc.stack.push(hit) }
+              }
+            }
+          }
+        },
+      )
+      trace(grid, next.stack, next.seen, next.lit)
+    }
+  }
+}
+
+/// The walk starts with a slide, since the entry tile need not be a mirror; if
+/// that slide leaves the grid there is nothing to trace.
 fn energised(grid: Grid, start: Beam) -> Int {
-  let seen = trace(grid, [start], visit(Map.empty(), start))
-  Map.values(seen).map(fn(row) {
-    Map.len(Map.keys(row).fold(Map.empty(), fn(columns, state) { Map.insert(columns, state / 4, true) }))
-  }).sum()
+  let first = slide(grid, start, Map.empty())
+  let lit = match first.stop {
+    None => first.lit
+    Some(hit) => trace(grid, [hit], seen_add(Map.empty(), hit), first.lit)
+  }
+  Map.values(lit).map(Map.len).sum()
 }
 
 /// Every way in: down the left edge heading east, down the right edge heading

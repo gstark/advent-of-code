@@ -35,7 +35,7 @@ fn digit_of(character: Str) -> Option[Int] {
 }
 
 fn digits(line: Str) -> List[Int] {
-  line.chars().flat_map(fn(character) { Option.to_list(digit_of(character)) })
+  line.chars().map(digit_of).compact()
 }
 
 /// A line with no digit at all is an error rather than a zero — the puzzle

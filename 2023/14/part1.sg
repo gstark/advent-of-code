@@ -44,9 +44,11 @@ fn transpose(rows: List[Str]) -> List[Str] {
   List.range(0, width).map(fn(c) { rows.map(fn(row) { row.slice(c, c + 1) }).join("") })
 }
 
-/// One stretch between cube rocks, with its round rocks slid to the front.
+/// One stretch between cube rocks, with its round rocks slid to the front. A
+/// stretch is cut at the cube rocks and so holds nothing but round rocks and
+/// dots, which is why dropping the dots counts the rocks.
 fn pack(stretch: Str) -> Str {
-  let rocks = stretch.chars().count(fn(square) { square == "O" })
+  let rocks = stretch.replace(".", "").len()
   "O".repeat(rocks) ++ ".".repeat(stretch.len() - rocks)
 }
 

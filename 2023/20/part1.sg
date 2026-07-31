@@ -48,43 +48,41 @@ fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
   }
 }
 
-fn parse_module(line: Str) -> Result[{ module: Module, name: Str }, Str] {
+fn parse_module(line: Str) -> Result[{ key: Str, value: Module }, Str] {
+  let complaint = "expected `<name> -> <dests>`, got: " ++ line
   let halves = line.split("->")
-  let left = halves.get(0).ok_or("expected `<name> -> <dests>`, got: " ++ line)?.trim()
-  let right = halves.get(1).ok_or("expected `<name> -> <dests>`, got: " ++ line)?
-  let dests = right.split(",").map(fn(dest) { dest.trim() }).reject(fn(dest) { dest == "" })
-  if left.starts_with("%") or left.starts_with("&") {
-    Ok({ module: { dests: dests, kind: left.slice(0, 1) }, name: left.slice(1, left.len()) })
-  } else {
-    Ok({ module: { dests: dests, kind: "b" }, name: left })
+  let left = halves.get(0).ok_or(complaint)?.trim()
+  let dests = halves.get(1).ok_or(complaint)?.split(",").map(fn(dest) { dest.trim() }).reject(fn(dest) { dest == "" })
+  let kind = left.slice(0, 1)
+  match left.strip_prefix("%").or_else(fn() { left.strip_prefix("&") }) {
+    Some(name) => Ok({ key: name, value: { dests: dests, kind: kind } })
+    None => Ok({ key: left, value: { dests: dests, kind: "b" } })
   }
 }
 
 fn parse_machine(lines: List[Str]) -> Result[Map[Str, Module], Str] {
-  Ok(lines.try_map(parse_module)?.fold(Map.empty(), fn(found, entry) {
-    Map.insert(found, entry.name, entry.module)
-  }))
+  Ok(Map.from_list(lines.try_map(parse_module)?))
 }
 
 /// A conjunction starts out remembering a low pulse from every input, so its
 /// inputs have to be found before anything runs — they are only visible as other
 /// modules' destinations.
 fn initial(modules: Map[Str, Module]) -> Machine {
-  let memory = Map.keys(modules).fold(Map.empty(), fn(memory, name) {
-    Map.get(modules, name).map(fn(module) {
-      module.dests.fold(memory, fn(inner, dest) {
-        match Map.get(modules, dest) {
-          None => inner
-          Some(target) => if target.kind == "&" {
-            Map.insert(inner, dest, Map.insert(Map.get(inner, dest).unwrap_or(Map.empty()), name, false))
-          } else {
-            inner
-          }
-        }
-      })
-    }).unwrap_or(memory)
+  let memory = Map.fold(modules, Map.empty(), fn(memory, name, module) {
+    module.dests.fold(memory, fn(inner, dest) {
+      if Map.get(modules, dest).map(fn(target) { target.kind == "&" }).unwrap_or(false) {
+        Map.update(inner, dest, fn(prior) { Map.insert(prior.unwrap_or(Map.empty()), name, false) })
+      } else {
+        inner
+      }
+    })
   })
   { flips: Map.empty(), memory: memory }
+}
+
+/// The same pulse to every destination of one module.
+fn fan(from: Str, dests: List[Str], high: Bool) -> List[Pulse] {
+  dests.map(fn(dest) { { from: from, high: high, to: dest } })
 }
 
 /// What one module does with one pulse: the new machine state, and whatever it
@@ -95,7 +93,7 @@ fn deliver(modules: Map[Str, Module], machine: Machine, pulse: Pulse) -> { machi
     None => { machine: machine, sent: [] }
     Some(module) => {
       if module.kind == "b" {
-        { machine: machine, sent: module.dests.map(fn(dest) { { from: pulse.to, high: pulse.high, to: dest } }) }
+        { machine: machine, sent: fan(pulse.to, module.dests, pulse.high) }
       } else if module.kind == "%" {
         if pulse.high {
           { machine: machine, sent: [] }
@@ -103,15 +101,14 @@ fn deliver(modules: Map[Str, Module], machine: Machine, pulse: Pulse) -> { machi
           let turned = not Map.get(machine.flips, pulse.to).unwrap_or(false)
           {
             machine: { flips: Map.insert(machine.flips, pulse.to, turned), memory: machine.memory },
-            sent: module.dests.map(fn(dest) { { from: pulse.to, high: turned, to: dest } }),
+            sent: fan(pulse.to, module.dests, turned),
           }
         }
       } else {
         let remembered = Map.insert(Map.get(machine.memory, pulse.to).unwrap_or(Map.empty()), pulse.from, pulse.high)
-        let all_high = Map.values(remembered).all(fn(seen) { seen })
         {
           machine: { flips: machine.flips, memory: Map.insert(machine.memory, pulse.to, remembered) },
-          sent: module.dests.map(fn(dest) { { from: pulse.to, high: not all_high, to: dest } }),
+          sent: fan(pulse.to, module.dests, not Map.values(remembered).all(fn(seen) { seen })),
         }
       }
     }
@@ -122,14 +119,15 @@ fn wave(modules: Map[Str, Module], carried: Counted, flying: List[Pulse]) -> Cou
   if flying.is_empty() {
     carried
   } else {
-    let stepped = flying.fold({ high: carried.high, low: carried.low, machine: carried.machine, sent: [] }, fn(state, pulse) {
+    let stepped = flying.fold({ machine: carried.machine, sent: [] }, fn(state, pulse) {
       let acted = deliver(modules, state.machine, pulse)
-      { high: state.high, low: state.low, machine: acted.machine, sent: state.sent ++ acted.sent }
+      { machine: acted.machine, sent: state.sent ++ acted.sent }
     })
     let onward = stepped.sent
+    let highs = onward.count(fn(pulse) { pulse.high })
     wave(modules, {
-      high: stepped.high + onward.count(fn(pulse) { pulse.high }),
-      low: stepped.low + onward.count(fn(pulse) { not pulse.high }),
+      high: carried.high + highs,
+      low: carried.low + onward.len() - highs,
       machine: stepped.machine,
     }, onward)
   }

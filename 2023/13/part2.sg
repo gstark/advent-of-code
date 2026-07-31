@@ -39,7 +39,7 @@ fn read_text(fs: Fs, path: Str) -> Result[Str, Str] {
 }
 
 fn parse_pattern(block: Str) -> List[Str] {
-  block.trim().split("\n").reject(fn(line) { line == "" })
+  block.trim().lines()
 }
 
 /// Columns become rows, so one fold-finder serves both directions.
@@ -51,17 +51,17 @@ fn transpose(rows: List[Str]) -> List[Str] {
 }
 
 fn differences(a: Str, b: Str) -> Int {
-  List.range(0, Int.min(a.len(), b.len())).count(fn(i) { a.slice(i, i + 1) != b.slice(i, i + 1) })
+  List.zip(a.chars(), b.chars()).count(fn(pair) { pair.first != pair.second })
 }
 
 /// How many characters disagree across a fold between rows `above - 1` and
-/// `above`. Rows that would reflect off the end of the pattern have nothing to
-/// disagree with and are skipped, which is what lets an off-centre fold count.
+/// `above`. Pairing the rows above (innermost first) against the rows below stops
+/// at whichever side runs out, so rows that would reflect off the end of the
+/// pattern are simply never paired — which is what lets an off-centre fold count.
 fn smudges(rows: List[Str], above: Int) -> Int {
-  let reach = Int.min(above, rows.len() - above)
-  List.range(0, reach).map(fn(step) {
-    differences(rows.get(above - 1 - step).unwrap_or(""), rows.get(above + step).unwrap_or(""))
-  }).sum()
+  List.zip(rows.take(above).reverse(), rows.drop(above))
+    .map(fn(pair) { differences(pair.first, pair.second) })
+    .sum()
 }
 
 /// The fold with exactly `wanted` disagreements, as a count of rows above it.

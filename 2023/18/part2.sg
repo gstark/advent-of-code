@@ -45,15 +45,15 @@ fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
   }
 }
 
-fn heading(letter: Str) -> Result[Dig, Str] {
+fn dig(letter: Str, distance: Int) -> Result[Dig, Str] {
   if letter == "R" {
-    Ok({ dc: 1, distance: 0, dr: 0 })
+    Ok({ dc: 1, distance: distance, dr: 0 })
   } else if letter == "L" {
-    Ok({ dc: 0 - 1, distance: 0, dr: 0 })
+    Ok({ dc: 0 - 1, distance: distance, dr: 0 })
   } else if letter == "U" {
-    Ok({ dc: 0, distance: 0, dr: 0 - 1 })
+    Ok({ dc: 0, distance: distance, dr: 0 - 1 })
   } else if letter == "D" {
-    Ok({ dc: 0, distance: 0, dr: 1 })
+    Ok({ dc: 0, distance: distance, dr: 1 })
   } else {
     Err("unknown direction: " ++ letter)
   }
@@ -69,27 +69,23 @@ fn parse_hex(digits: Str) -> Result[Int, Str] {
 /// The colour, stripped of its `(#` and `)`: five digits of distance, then one
 /// naming the direction.
 fn parse_dig(line: Str) -> Result[Dig, Str] {
-  let parts = line.words()
-  let colour = parts.get(2).ok_or("expected `<dir> <count> (<colour>)`, got: " ++ line)?
-  let code = colour.replace("(", "").replace(")", "").replace("#", "")
+  let colour = line.words().get(2).ok_or("expected `<dir> <count> (<colour>)`, got: " ++ line)?
+  let code = colour.strip_prefix("(#").and_then(fn(rest) { rest.strip_suffix(")") })
+    .ok_or("expected `(#......)`, got: " ++ colour)?
   if code.len() != 6 {
     Err("expected six hex digits, got: " ++ colour)
   } else {
-    let step = heading(["R", "D", "L", "U"].get(parse_hex(code.slice(5, 6))?).ok_or("unknown direction in: " ++ colour)?)?
-    Ok({ dc: step.dc, distance: parse_hex(code.slice(0, 5))?, dr: step.dr })
+    let letter = ["R", "D", "L", "U"].get(parse_hex(code.slice(5, 6))?).ok_or("unknown direction in: " ++ colour)?
+    dig(letter, parse_hex(code.slice(0, 5))?)
   }
 }
 
-fn walk(plan: List[Dig]) -> Walk {
-  plan.fold({ c: 0, doubled: 0, edge: 0, r: 0 }, fn(at, dig) {
-    let nr = at.r + dig.dr * dig.distance
-    let nc = at.c + dig.dc * dig.distance
-    { c: nc, doubled: at.doubled + at.c * nr - nc * at.r, edge: at.edge + dig.distance, r: nr }
-  })
-}
-
 fn lagoon(plan: List[Dig]) -> Int {
-  let traced = walk(plan)
+  let traced = plan.fold({ c: 0, doubled: 0, edge: 0, r: 0 }, fn(at, step) {
+    let nr = at.r + step.dr * step.distance
+    let nc = at.c + step.dc * step.distance
+    { c: nc, doubled: at.doubled + at.c * nr - nc * at.r, edge: at.edge + step.distance, r: nr }
+  })
   Int.abs(traced.doubled) / 2 + traced.edge / 2 + 1
 }
 

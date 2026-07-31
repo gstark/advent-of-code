@@ -33,25 +33,24 @@ fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
   }
 }
 
-fn parse_node(line: Str) -> Result[{ name: Str, node: Node }, Str] {
-  let halves = line.split("=")
-  let name = halves.get(0).ok_or("expected `<name> = (<left>, <right>)`, got: " ++ line)?.trim()
-  let body = halves.get(1).ok_or("expected `<name> = (<left>, <right>)`, got: " ++ line)?
-  let pair = body.replace("(", "").replace(")", "").split(",")
+/// `AAA = (BBB, CCC)` carries no information in its punctuation, so blanking it
+/// out leaves three words to name.
+fn parse_node(line: Str) -> Result[{ key: Str, value: Node }, Str] {
+  let words = line.replace("=", " ").replace("(", " ").replace(")", " ").replace(",", " ").words()
+  let malformed = "expected `<name> = (<left>, <right>)`, got: " ++ line
   Ok({
-    name: name,
-    node: {
-      left: pair.get(0).ok_or("expected two successors, got: " ++ line)?.trim(),
-      right: pair.get(1).ok_or("expected two successors, got: " ++ line)?.trim(),
+    key: words.get(0).ok_or(malformed)?,
+    value: {
+      left: words.get(1).ok_or(malformed)?,
+      right: words.get(2).ok_or(malformed)?,
     },
   })
 }
 
 fn parse_network(lines: List[Str]) -> Result[Network, Str] {
   let turns = lines.first().ok_or("expected a line of turns")?
-  let parsed = lines.drop(1).try_map(parse_node)?
   Ok({
-    nodes: parsed.fold(Map.empty(), fn(nodes, entry) { Map.insert(nodes, entry.name, entry.node) }),
+    nodes: Map.from_list(lines.drop(1).try_map(parse_node)?),
     turns: turns.trim(),
   })
 }
@@ -65,11 +64,7 @@ fn turn_at(turns: Str, step: Int) -> Str {
 
 fn hop(network: Network, from: Str, step: Int) -> Result[Str, Str] {
   let node = Map.get(network.nodes, from).ok_or("no such node: " ++ from)?
-  if turn_at(network.turns, step) == "L" {
-    Ok(node.left)
-  } else {
-    Ok(node.right)
-  }
+  Ok(if turn_at(network.turns, step) == "L" { node.left } else { node.right })
 }
 
 fn walk(network: Network, at: Str, step: Int) -> Result[Int, Str] {

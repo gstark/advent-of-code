@@ -81,13 +81,10 @@ fn numbers(lines: List[Str]) -> List[Num] {
 
 /// Every cell a run covers, mapped to that run's index in `found`.
 fn number_cells(found: List[Num]) -> Map[Int, Int] {
-  List.range(0, found.len()).fold(Map.empty(), fn(cells, index) {
-    match found.get(index) {
-      None => cells
-      Some(number) => List.range(number.lo, number.hi + 1).fold(cells, fn(inner, col) {
-        Map.insert(inner, key(number.row, col), index)
-      })
-    }
+  List.zip(List.range(0, found.len()), found).fold(Map.empty(), fn(cells, pair) {
+    List.range(pair.second.lo, pair.second.hi + 1).fold(cells, fn(inner, col) {
+      Map.insert(inner, key(pair.second.row, col), pair.first)
+    })
   })
 }
 
@@ -106,7 +103,7 @@ fn neighbours(at: Int) -> List[Int] {
 
 /// The ratio of a `*`, or nothing when it does not touch exactly two runs.
 fn ratio(cells: Map[Int, Int], found: List[Num], at: Int) -> Option[Int] {
-  let touching = neighbours(at).flat_map(fn(cell) { Option.to_list(Map.get(cells, cell)) }).uniq()
+  let touching = neighbours(at).map(fn(cell) { Map.get(cells, cell) }).compact().uniq()
   if touching.len() == 2 {
     Some(touching.fold(1, fn(product, index) {
       product * found.get(index).map(fn(number) { number.value }).unwrap_or(1)
@@ -121,7 +118,7 @@ fn main(sys: Sys) -> Result[Unit, Str] {
   let lines = read_lines(sys.fs, path)?
   let found = numbers(lines)
   let cells = number_cells(found)
-  let total = stars(lines).flat_map(fn(at) { Option.to_list(ratio(cells, found, at)) }).sum()
+  let total = stars(lines).map(fn(at) { ratio(cells, found, at) }).compact().sum()
   sys.console.print("sum of gear ratios: " ++ Int.to_str(total))
   Ok(())
 }

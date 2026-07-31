@@ -35,7 +35,7 @@ fn read_text(fs: Fs, path: Str) -> Result[Str, Str] {
 }
 
 fn parse_rule(line: Str) -> Result[Rule, Str] {
-  let parts = line.words().try_map(Int.parse)?
+  let parts = parse_numbers(line)?
   if parts.len() != 3 {
     Err("expected `<dst> <src> <len>`, got: " ++ line)
   } else {
@@ -51,7 +51,7 @@ fn parse_rule(line: Str) -> Result[Rule, Str] {
 /// dropped. The layers are applied in file order, which is already the order the
 /// puzzle chains them in — no need to read the names.
 fn parse_layer(block: Str) -> Result[List[Rule], Str] {
-  block.trim().lines().drop(1).reject(fn(line) { line.trim() == "" }).try_map(parse_rule)
+  block.trim().lines().drop(1).try_map(parse_rule)
 }
 
 fn parse_almanac(text: Str) -> Result[Almanac, Str] {

@@ -38,10 +38,10 @@ fn parse_numbers(text: Str) -> Result[List[Int], Str] {
 }
 
 fn matches(line: Str) -> Result[Int, Str] {
-  let body = line.split(":").get(1).ok_or("expected `Card <id>: ...`, got: " ++ line)?
-  let halves = body.split("|")
-  let winning = parse_numbers(halves.get(0).ok_or("expected `<winning> | <held>`, got: " ++ line)?)?
-  let held = parse_numbers(halves.get(1).ok_or("expected `<winning> | <held>`, got: " ++ line)?)?
+  let fields = line.replace(":", "|").split("|")
+  let malformed = "expected `Card <id>: <winning> | <held>`, got: " ++ line
+  let winning = parse_numbers(fields.get(1).ok_or(malformed)?)?
+  let held = parse_numbers(fields.get(2).ok_or(malformed)?)?
   Ok(held.count(fn(number) { winning.contains(number) }))
 }
 
@@ -54,7 +54,7 @@ fn pile(won: List[Int]) -> Int {
     let copies = Map.get(counts, index).unwrap_or(1)
     let reach = Int.min(cards, index + 1 + won.get(index).unwrap_or(0))
     List.range(index + 1, reach).fold(Map.insert(counts, index, copies), fn(inner, next) {
-      Map.insert(inner, next, Map.get(inner, next).unwrap_or(1) + copies)
+      Map.update(inner, next, fn(current) { current.unwrap_or(1) + copies })
     })
   })
   Map.values(counts).sum()

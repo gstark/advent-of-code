@@ -452,3 +452,40 @@ say anything about the language are the ones at the top of this table, and there
 is: `Map` and `uniq` were asymptotic bugs and are fixed; strings were allocating far too much and
 are better; and what is left is the interpreter itself, which is roughly half of every heavy
 program's time and has not been touched.
+
+## Refactor pass, 2026-07-31 — and a build-mismatch warning
+
+A full review-and-refactor pass over all 43 programs (one agent per day, outputs verified
+byte-identical against a pre-refactor baseline). Perf movement on the real inputs, foreground,
+same machine: day 12 part 2 **4.05s → 1.62s** (per-record run table replaces per-cell scans),
+day 14 part 2 **3.53s → 1.96s** (dropped the mirror trick for a direct east pack; `seen ++ [rows]`
+→ `push`), day 16 part 2 **16.6s → 9.4s** (beams slide across runs of empty tiles, so only mirror
+arrivals enter the visited set). Everything else within noise. Line counts mostly down a little;
+day 16 grew ~50 lines per file to buy its 1.86x.
+
+### The warning: the `sigil` on PATH is not the build the re-measurements above describe
+
+Every "fixed" claim in this document was re-measured on a dev build. The installed `sigil 0.1.0`
+that actually runs these programs still has the old behaviour — measured directly this session:
+
+- `Map.insert` fold: 16000 → 1.66s, 48000 → 16.2s. That is the **"was"** row, exactly. The
+  bucketed-map workarounds (days 16, 17, 21) are still load-bearing: de-bucketing day 17 was tried
+  and went 1.0s → 24s; day 16 went 0.17s → 2.17s on part 1. Both reverted.
+- `List.uniq` is still O(n × distinct): 80k records took 14.8s (day 21 probe).
+- `Set`, `Int.rem_euclid`, `Int.parse_radix` do not exist — E0402. The stdlib reference site
+  documents them; the binary does not have them.
+
+So: either install the fixed build on PATH, or read this document's "now" rows as "not yet, here".
+
+### New language findings from the pass (installed 0.1.0)
+
+- **No list patterns.** `[a, b, c]` as a pattern is E0115 — `get(i)`/`ok_or` chains stay.
+- **String-literal `match` arms work**, including a trailing bare-identifier catch-all that binds
+  the value (used for colour names, pipe shapes).
+- **Match arms cannot share a line comma-separated** (E0110); one arm per line.
+- **`_` is not a legal closure parameter name** — use a real name.
+- **`List.sort` requires a comparator** (E0204 if called bare); `List.sorted` is the natural-order one.
+- **Type aliases must be records/sums.** `type Part = Map[Str, Int]` and parameterized RHSes are
+  E0112 — long map signatures get written out in full.
+- **`sigil exec` sandboxes fs reads to the script's directory** — a temp copy of a program must
+  bring its input along.

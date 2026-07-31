@@ -63,40 +63,32 @@ fn exits(pipe: Str, at: Point) -> List[Point] {
   let south = { c: at.c, r: at.r + 1 }
   let east = { c: at.c + 1, r: at.r }
   let west = { c: at.c - 1, r: at.r }
-  if pipe == "|" {
-    [north, south]
-  } else if pipe == "-" {
-    [east, west]
-  } else if pipe == "L" {
-    [north, east]
-  } else if pipe == "J" {
-    [north, west]
-  } else if pipe == "7" {
-    [south, west]
-  } else if pipe == "F" {
-    [south, east]
-  } else {
-    []
+  match pipe {
+    "|" => [north, south]
+    "-" => [east, west]
+    "L" => [north, east]
+    "J" => [north, west]
+    "7" => [south, west]
+    "F" => [south, east]
+    _ => []
   }
 }
 
 fn find_start(grid: List[Str]) -> Result[Point, Str] {
-  let found = List.range(0, grid.len()).flat_map(fn(r) {
-    match Str.index_of(grid.get(r).unwrap_or(""), "S") {
-      None => []
-      Some(c) => [{ c: c, r: r }]
-    }
-  })
-  found.first().ok_or("no start tile")
+  List.range(0, grid.len()).zip(grid).flat_map(fn(row) {
+    row.second.index_of("S").map(fn(c) { { c: c, r: row.first } }).to_list()
+  }).first().ok_or("no start tile")
 }
 
-fn loop_ends(grid: List[Str], start: Point) -> List[Point] {
+/// A neighbour whose own pipe points back at `S`. There are exactly two, and
+/// either one walks the whole loop, so the first found is enough.
+fn loop_end(grid: List[Str], start: Point) -> Option[Point] {
   [
     { c: start.c, r: start.r - 1 },
     { c: start.c, r: start.r + 1 },
     { c: start.c + 1, r: start.r },
     { c: start.c - 1, r: start.r },
-  ].filter(fn(at) { exits(tile(grid, at), at).contains(start) })
+  ].find(fn(at) { exits(tile(grid, at), at).contains(start) })
 }
 
 /// One shoelace term for the edge from `a` to `b`.
@@ -120,7 +112,7 @@ fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
   let grid = read_lines(sys.fs, path)?
   let start = find_start(grid)?
-  let first = loop_ends(grid, start).first().ok_or("the start tile connects to nothing")?
+  let first = loop_end(grid, start).ok_or("the start tile connects to nothing")?
   let traced = walk(grid, start, start, first, { boundary: 0, doubled: 0 })?
   let area = Int.abs(traced.doubled) / 2
   sys.console.print("loop length: " ++ Int.to_str(traced.boundary))

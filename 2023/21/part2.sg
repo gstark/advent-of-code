@@ -73,9 +73,10 @@ fn wrap(value: Int, extent: Int) -> Int {
 }
 
 fn tile(grid: Grid, at: Plot) -> Str {
+  let c = wrap(at.c, grid.width)
   match grid.rows.get(wrap(at.r, grid.height)) {
     None => "#"
-    Some(row) => row.slice(wrap(at.c, grid.width), wrap(at.c, grid.width) + 1)
+    Some(row) => row.slice(c, c + 1)
   }
 }
 
@@ -133,12 +134,10 @@ fn reachable(grid: Grid, from: Plot, steps: Int) -> Int {
   sweep(grid, [from], mark(Map.empty(), from), 0, steps, seeded)
 }
 
-/// Fits the quadratic through the three ring counts and reads off ring `n`.
-/// Written as first and second differences rather than as coefficients, so the
-/// numbers being trusted are the ones printed.
-fn extrapolate(first: Int, second: Int, third: Int, n: Int) -> Int {
-  let step = second - first
-  let curve = (third - second) - step
+/// Fits the quadratic through ring zero's count and reads off ring `n`. Written
+/// in terms of the first and second differences rather than as coefficients, so
+/// the numbers being trusted are exactly the ones printed.
+fn extrapolate(first: Int, step: Int, curve: Int, n: Int) -> Int {
   first + n * step + n * (n - 1) / 2 * curve
 }
 
@@ -170,11 +169,14 @@ fn main(sys: Sys) -> Result[Unit, Str] {
     let first = counts.get(0).unwrap_or(0)
     let second = counts.get(1).unwrap_or(0)
     let third = counts.get(2).unwrap_or(0)
+    let step = second - first
+    let next = third - second
+    let curve = next - step
     sys.console.print("ring counts: " ++ counts.map(Int.to_str).join(" "))
-    sys.console.print("differences: " ++ Int.to_str(second - first) ++ " " ++ Int.to_str(third - second)
-      ++ ", second difference: " ++ Int.to_str((third - second) - (second - first)))
+    sys.console.print("differences: " ++ Int.to_str(step) ++ " " ++ Int.to_str(next)
+      ++ ", second difference: " ++ Int.to_str(curve))
     sys.console.print("plots reachable in exactly " ++ Int.to_str(steps) ++ " steps: "
-      ++ Int.to_str(extrapolate(first, second, third, steps / grid.width)))
+      ++ Int.to_str(extrapolate(first, step, curve, steps / grid.width)))
     Ok(())
   }
 }

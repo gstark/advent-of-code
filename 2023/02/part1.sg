@@ -47,16 +47,13 @@ fn Draw.max(a: Draw, b: Draw) -> Draw {
 
 fn parse_cube(text: Str) -> Result[Draw, Str] {
   let parts = text.trim().words()
-  let count = Int.parse(parts.get(0).ok_or("expected `<count> <colour>`, got: " ++ text)?)?
-  let colour = parts.get(1).ok_or("expected `<count> <colour>`, got: " ++ text)?
-  if colour == "red" {
-    Ok({ blue: 0, green: 0, red: count })
-  } else if colour == "green" {
-    Ok({ blue: 0, green: count, red: 0 })
-  } else if colour == "blue" {
-    Ok({ blue: count, green: 0, red: 0 })
-  } else {
-    Err("unknown colour: " ++ colour)
+  let malformed = "expected `<count> <colour>`, got: " ++ text
+  let count = Int.parse(parts.get(0).ok_or(malformed)?)?
+  match parts.get(1).ok_or(malformed)? {
+    "red" => Ok({ blue: 0, green: 0, red: count })
+    "green" => Ok({ blue: 0, green: count, red: 0 })
+    "blue" => Ok({ blue: count, green: 0, red: 0 })
+    colour => Err("unknown colour: " ++ colour)
   }
 }
 
@@ -65,9 +62,10 @@ fn parse_draw(text: Str) -> Result[Draw, Str] {
 }
 
 fn parse_game(line: Str) -> Result[Game, Str] {
+  let malformed = "expected `Game <id>: ...`, got: " ++ line
   let halves = line.split(":")
-  let heading = halves.get(0).ok_or("expected `Game <id>: ...`, got: " ++ line)?
-  let body = halves.get(1).ok_or("expected `Game <id>: ...`, got: " ++ line)?
+  let heading = halves.get(0).ok_or(malformed)?
+  let body = halves.get(1).ok_or(malformed)?
   let id = Int.parse(heading.words().get(1).ok_or("expected `Game <id>`, got: " ++ heading)?)?
   Ok({ draws: body.split(";").try_map(parse_draw)?, id: id })
 }

@@ -47,10 +47,6 @@ fn hash(text: Str) -> Int {
   })
 }
 
-fn box_of(boxes: Map[Int, List[Lens]], label: Str) -> List[Lens] {
-  Map.get(boxes, hash(label)).unwrap_or([])
-}
-
 /// A lens already in the box keeps its slot and gets the new focal length;
 /// otherwise it joins the back.
 fn install(lenses: List[Lens], fitted: Lens) -> List[Lens] {
@@ -62,24 +58,28 @@ fn install(lenses: List[Lens], fitted: Lens) -> List[Lens] {
 }
 
 fn apply(boxes: Map[Int, List[Lens]], step: Str) -> Result[Map[Int, List[Lens]], Str] {
-  if step.ends_with("-") {
-    let label = step.slice(0, step.len() - 1)
-    Ok(Map.insert(boxes, hash(label), box_of(boxes, label).reject(fn(lens) { lens.label == label })))
-  } else {
-    let halves = step.split("=")
-    let label = halves.get(0).ok_or("expected `<label>=<focal>` or `<label>-`, got: " ++ step)?
-    let focal = Int.parse(halves.get(1).ok_or("expected a focal length, got: " ++ step)?)?
-    Ok(Map.insert(boxes, hash(label), install(box_of(boxes, label), { focal: focal, label: label })))
+  match step.strip_suffix("-") {
+    Some(label) => Ok(Map.update(boxes, hash(label), fn(box) {
+      box.unwrap_or([]).reject(fn(lens) { lens.label == label })
+    }))
+    None => {
+      let halves = step.split("=")
+      let label = halves.get(0).ok_or("expected `<label>=<focal>` or `<label>-`, got: " ++ step)?
+      let focal = Int.parse(halves.get(1).ok_or("expected a focal length, got: " ++ step)?)?
+      Ok(Map.update(boxes, hash(label), fn(box) {
+        install(box.unwrap_or([]), { focal: focal, label: label })
+      }))
+    }
   }
 }
 
+/// Empty boxes contribute nothing, so folding the map skips them.
 fn focusing_power(boxes: Map[Int, List[Lens]]) -> Int {
-  List.range(0, 256).map(fn(number) {
-    let lenses = Map.get(boxes, number).unwrap_or([])
-    List.range(0, lenses.len()).map(fn(slot) {
-      (number + 1) * (slot + 1) * lenses.get(slot).map(fn(lens) { lens.focal }).unwrap_or(0)
+  Map.fold(boxes, 0, fn(total, number, lenses) {
+    total + List.zip(List.range(1, lenses.len() + 1), lenses).map(fn(pair) {
+      (number + 1) * pair.first * pair.second.focal
     }).sum()
-  }).sum()
+  })
 }
 
 fn main(sys: Sys) -> Result[Unit, Str] {

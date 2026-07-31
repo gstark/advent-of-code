@@ -87,18 +87,17 @@ fn numbers(lines: List[Str]) -> List[Num] {
   List.range(0, lines.len()).flat_map(fn(row) { row_numbers(row, lines.get(row).unwrap_or("")) })
 }
 
-fn symbol_cells(lines: List[Str]) -> Map[Int, Str] {
-  List.range(0, lines.len()).fold(Map.empty(), fn(cells, row) {
+fn is_symbol(character: Str) -> Bool {
+  character != "." and not is_digit(character)
+}
+
+fn symbol_cells(lines: List[Str]) -> Map[Int, Bool] {
+  List.range(0, lines.len()).flat_map(fn(row) {
     let characters = lines.get(row).unwrap_or("").chars()
-    List.range(0, characters.len()).fold(cells, fn(inner, col) {
-      let character = characters.get(col).unwrap_or(".")
-      if character == "." or is_digit(character) {
-        inner
-      } else {
-        Map.insert(inner, key(row, col), character)
-      }
-    })
-  })
+    List.range(0, characters.len())
+      .filter(fn(col) { is_symbol(characters.get(col).unwrap_or(".")) })
+      .map(fn(col) { key(row, col) })
+  }).fold(Map.empty(), fn(cells, at) { Map.insert(cells, at, true) })
 }
 
 /// Every cell in the box around a run, its own cells included — those hold

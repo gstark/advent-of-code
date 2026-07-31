@@ -40,15 +40,15 @@ fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
   }
 }
 
-fn heading(letter: Str) -> Result[Dig, Str] {
+fn dig(letter: Str, distance: Int) -> Result[Dig, Str] {
   if letter == "R" {
-    Ok({ dc: 1, distance: 0, dr: 0 })
+    Ok({ dc: 1, distance: distance, dr: 0 })
   } else if letter == "L" {
-    Ok({ dc: 0 - 1, distance: 0, dr: 0 })
+    Ok({ dc: 0 - 1, distance: distance, dr: 0 })
   } else if letter == "U" {
-    Ok({ dc: 0, distance: 0, dr: 0 - 1 })
+    Ok({ dc: 0, distance: distance, dr: 0 - 1 })
   } else if letter == "D" {
-    Ok({ dc: 0, distance: 0, dr: 1 })
+    Ok({ dc: 0, distance: distance, dr: 1 })
   } else {
     Err("unknown direction: " ++ letter)
   }
@@ -59,21 +59,15 @@ fn heading(letter: Str) -> Result[Dig, Str] {
 fn parse_dig(line: Str) -> Result[Dig, Str] {
   let parts = line.words()
   let letter = parts.get(0).ok_or("expected `<dir> <count> (<colour>)`, got: " ++ line)?
-  let step = heading(letter)?
-  let distance = Int.parse(parts.get(1).ok_or("expected a distance, got: " ++ line)?)?
-  Ok({ dc: step.dc, distance: distance, dr: step.dr })
-}
-
-fn walk(plan: List[Dig]) -> Walk {
-  plan.fold({ c: 0, doubled: 0, edge: 0, r: 0 }, fn(at, dig) {
-    let nr = at.r + dig.dr * dig.distance
-    let nc = at.c + dig.dc * dig.distance
-    { c: nc, doubled: at.doubled + at.c * nr - nc * at.r, edge: at.edge + dig.distance, r: nr }
-  })
+  dig(letter, Int.parse(parts.get(1).ok_or("expected a distance, got: " ++ line)?)?)
 }
 
 fn lagoon(plan: List[Dig]) -> Int {
-  let traced = walk(plan)
+  let traced = plan.fold({ c: 0, doubled: 0, edge: 0, r: 0 }, fn(at, step) {
+    let nr = at.r + step.dr * step.distance
+    let nc = at.c + step.dc * step.distance
+    { c: nc, doubled: at.doubled + at.c * nr - nc * at.r, edge: at.edge + step.distance, r: nr }
+  })
   Int.abs(traced.doubled) / 2 + traced.edge / 2 + 1
 }
 

@@ -14,8 +14,8 @@
 /// a `.` only the first, a `#` only the second.
 ///
 /// Sigil has no mutable memo table, so the table is built bottom-up instead: rows
-/// go from `i = n` down to 0, and each row reads only the row below it, which is
-/// already in the `Map` being folded through. That gets memoisation's asymptotics
+/// go from `i = n` down to 0, and each row reads only the rows below it, which are
+/// already in the list being folded through. That gets memoisation's asymptotics
 /// with no mutation and no recursion.
 ///
 /// Advent of Code 2023, day 12, part 2. A Sigil implementation —
@@ -50,62 +50,64 @@ fn parse_record(line: Str) -> Result[Record, Str] {
   let parts = line.words()
   let springs = parts.get(0).ok_or("expected `<springs> <groups>`, got: " ++ line)?
   let groups = parts.get(1).ok_or("expected `<springs> <groups>`, got: " ++ line)?
-  let unfolded = List.range(0, 5).map(fn(copy) { springs }).join("?")
+  let five = List.range(0, 5)
   Ok({
-    groups: List.range(0, 5).flat_map(fn(copy) { groups.split(",") }).try_map(Int.parse)?,
-    springs: unfolded.chars(),
+    groups: five.flat_map(fn(copy) { groups.split(",") }).try_map(Int.parse)?,
+    springs: five.map(fn(copy) { springs }).join("?").chars(),
   })
 }
 
-/// The table is a list of rows with the most recently built at the head, so while
-/// row `i` is being filled the head is row `i + 1` and row `r` sits at index
-/// `r - i - 1`. Indexing a list beats hashing a packed key into a `Map`: on the
-/// real input that alone is the difference between half a minute and a few
-/// seconds.
-fn lookup(rows: List[List[Int]], i: Int, at: Int, j: Int) -> Int {
-  rows.get(at - i - 1).and_then(fn(row) { row.get(j) }).unwrap_or(0)
-}
-
-/// Whether a group of `size` can start at `i`: no known-operational spring inside
-/// it, and it is not immediately followed by a damaged one, which would make the
-/// group longer than claimed. Running off the end is the clean way to finish.
-fn group_fits(springs: List[Str], i: Int, size: Int) -> Bool {
-  let n = springs.len()
-  if i + size > n {
-    false
-  } else {
-    List.range(i, i + size).all(fn(k) { springs.get(k).unwrap_or(".") != "." })
-      and (i + size == n or springs.get(i + size).unwrap_or(".") != "#")
-  }
-}
-
-fn ways(record: Record, rows: List[List[Int]], i: Int, j: Int) -> Int {
-  let n = record.springs.len()
-  let m = record.groups.len()
-  let here = record.springs.get(i).unwrap_or(".")
-  let as_operational = if here == "#" { 0 } else { lookup(rows, i, i + 1, j) }
-  let as_damaged = if here == "." or j >= m {
-    0
-  } else {
-    let size = record.groups.get(j).unwrap_or(0)
-    if group_fits(record.springs, i, size) {
-      lookup(rows, i, Int.min(n, i + size + 1), j + 1)
+/// How long a group could be if it started at each index: the run of springs from
+/// there that are not known-operational. Built once per record from the right, so
+/// checking whether group `size` fits at `i` is a comparison rather than a scan.
+fn damaged_runs(springs: List[Str]) -> List[Int] {
+  List.range(0, springs.len()).fold([], fn(runs, step) {
+    let i = springs.len() - 1 - step
+    if springs.get(i).unwrap_or(".") == "." {
+      [0] ++ runs
     } else {
-      0
+      [1 + runs.first().unwrap_or(0)] ++ runs
     }
-  }
-  as_operational + as_damaged
+  })
 }
 
+/// Rows are kept with the most recently built at the head, so while row `i` is
+/// being filled the head is row `i + 1` and row `i + d` sits at index `d - 1`.
+/// Indexing a list beats hashing a packed key into a `Map`: on the real input that
+/// alone is the difference between half a minute and a few seconds.
+///
 /// Row `n` is the base case: having consumed the whole record, there is one
 /// arrangement if every group was placed and none otherwise.
 fn arrangements(record: Record) -> Int {
-  let n = record.springs.len()
+  let springs = record.springs
+  let n = springs.len()
   let m = record.groups.len()
-  let base = [List.range(0, m + 1).map(fn(j) { if j == m { 1 } else { 0 } })]
+  let runs = damaged_runs(springs)
+  let columns = List.range(0, m + 1)
+  let base = [columns.map(fn(j) { if j == m { 1 } else { 0 } })]
   let filled = List.range(0, n).fold(base, fn(rows, step) {
     let i = n - 1 - step
-    [List.range(0, m + 1).map(fn(j) { ways(record, rows, i, j) })] ++ rows
+    let here = springs.get(i).unwrap_or(".")
+    let run = runs.get(i).unwrap_or(0)
+    let below = rows.first().unwrap_or([])
+    [columns.map(fn(j) {
+      let as_operational = if here == "#" { 0 } else { below.get(j).unwrap_or(0) }
+      let as_damaged = if here == "." or j >= m {
+        0
+      } else {
+        // A group of `size` fits when it stays inside the run and is not butted
+        // against a `#`, which would make it longer than claimed. It lands on row
+        // `i + size + 1`, past the group and its separator, except when it ends
+        // the record exactly and there is no separator left to skip.
+        let size = record.groups.get(j).unwrap_or(0)
+        if size <= run and (i + size == n or springs.get(i + size).unwrap_or(".") != "#") {
+          rows.get(Int.min(size, n - i - 1)).and_then(fn(row) { row.get(j + 1) }).unwrap_or(0)
+        } else {
+          0
+        }
+      }
+      as_operational + as_damaged
+    })] ++ rows
   })
   filled.first().and_then(fn(row) { row.first() }).unwrap_or(0)
 }

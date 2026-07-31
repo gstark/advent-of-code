@@ -48,34 +48,32 @@ fn galaxies(grid: List[Str]) -> List[Galaxy] {
   })
 }
 
-/// How much each coordinate on one axis shifts: running total of the empty lines
-/// at or before it, each worth `factor - 1` extra.
-fn shifts(occupied: List[Int], extent: Int, factor: Int) -> Map[Int, Int] {
-  List.range(0, extent).fold({ shift: 0, table: Map.empty() }, fn(state, index) {
-    let grown = if occupied.contains(index) { state.shift } else { state.shift + factor - 1 }
-    { shift: grown, table: Map.insert(state.table, index, index + state.shift) }
-  }).table
+/// Where coordinates on one axis land: the shift is a running total of the empty
+/// lines before them, each worth `factor - 1` extra, tabulated once and then looked
+/// up per galaxy.
+fn expanded(values: List[Int], extent: Int, factor: Int) -> List[Int] {
+  let table = List.range(0, extent).fold({ shift: 0, moved: Map.empty() }, fn(state, index) {
+    let grown = if values.contains(index) { state.shift } else { state.shift + factor - 1 }
+    { shift: grown, moved: Map.insert(state.moved, index, index + state.shift) }
+  }).moved
+  values.map(fn(value) { Map.get(table, value).unwrap_or(value) })
 }
 
-fn expand(found: List[Galaxy], grid: List[Str], factor: Int) -> List[Galaxy] {
-  let rows = shifts(found.map(fn(galaxy) { galaxy.r }).uniq(), grid.len(), factor)
+/// Manhattan distance splits into two axes that never interact, and one sorted axis
+/// needs no pairs at all: each value sits to the right of every earlier one, adding
+/// itself once per value seen, less the sum of those values.
+fn axis_total(values: List[Int]) -> Int {
+  values.sorted().fold({ seen: 0, before: 0, total: 0 }, fn(state, value) {
+    { seen: state.seen + 1,
+      before: state.before + value,
+      total: state.total + value * state.seen - state.before }
+  }).total
+}
+
+fn total_distance(found: List[Galaxy], grid: List[Str], factor: Int) -> Int {
   let width = grid.first().unwrap_or("").len()
-  let columns = shifts(found.map(fn(galaxy) { galaxy.c }).uniq(), width, factor)
-  found.map(fn(galaxy) {
-    { c: Map.get(columns, galaxy.c).unwrap_or(galaxy.c), r: Map.get(rows, galaxy.r).unwrap_or(galaxy.r) }
-  })
-}
-
-/// Every pair once: `j` always starts past `i`.
-fn total_distance(found: List[Galaxy]) -> Int {
-  let count = found.len()
-  List.range(0, count).flat_map(fn(i) {
-    let a = found.get(i).unwrap_or({ c: 0, r: 0 })
-    List.range(i + 1, count).map(fn(j) {
-      let b = found.get(j).unwrap_or({ c: 0, r: 0 })
-      Int.abs(a.r - b.r) + Int.abs(a.c - b.c)
-    })
-  }).sum()
+  axis_total(expanded(found.map(fn(galaxy) { galaxy.r }), grid.len(), factor))
+    + axis_total(expanded(found.map(fn(galaxy) { galaxy.c }), width, factor))
 }
 
 fn main(sys: Sys) -> Result[Unit, Str] {
@@ -87,6 +85,6 @@ fn main(sys: Sys) -> Result[Unit, Str] {
     Some(raw) => Int.parse(raw)?
   }
   sys.console.print("galaxies: " ++ Int.to_str(found.len()) ++ ", expansion factor: " ++ Int.to_str(factor))
-  sys.console.print("sum of distances: " ++ Int.to_str(total_distance(expand(found, grid, factor))))
+  sys.console.print("sum of distances: " ++ Int.to_str(total_distance(found, grid, factor)))
   Ok(())
 }

@@ -9,8 +9,9 @@
 /// the handful of states already seen. In practice the loop turns up inside a
 /// couple of hundred cycles.
 ///
-/// Every direction reuses part 1's westward roll: east is west of a mirrored
-/// platform, north and south are west and east of the transposed one.
+/// Every direction is part 1's roll: rolling east packs each stretch to the far
+/// end rather than the near one, and north and south are west and east of the
+/// transposed platform.
 ///
 /// Advent of Code 2023, day 14, part 2. A Sigil implementation —
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
@@ -48,21 +49,25 @@ fn transpose(rows: List[Str]) -> List[Str] {
   List.range(0, width).map(fn(c) { rows.map(fn(row) { row.slice(c, c + 1) }).join("") })
 }
 
-fn mirror(rows: List[Str]) -> List[Str] {
-  rows.map(fn(row) { row.chars().reverse().join("") })
-}
-
-fn pack(stretch: Str) -> Str {
-  let rocks = stretch.chars().count(fn(square) { square == "O" })
+/// One stretch between cube rocks, with its round rocks slid to one end. A
+/// stretch is cut at the cube rocks and so holds nothing but round rocks and
+/// dots, which is why dropping the dots counts the rocks.
+fn pack_west(stretch: Str) -> Str {
+  let rocks = stretch.replace(".", "").len()
   "O".repeat(rocks) ++ ".".repeat(stretch.len() - rocks)
 }
 
+fn pack_east(stretch: Str) -> Str {
+  let rocks = stretch.replace(".", "").len()
+  ".".repeat(stretch.len() - rocks) ++ "O".repeat(rocks)
+}
+
 fn roll_west(rows: List[Str]) -> List[Str] {
-  rows.map(fn(row) { row.split("#").map(pack).join("#") })
+  rows.map(fn(row) { row.split("#").map(pack_west).join("#") })
 }
 
 fn roll_east(rows: List[Str]) -> List[Str] {
-  mirror(roll_west(mirror(rows)))
+  rows.map(fn(row) { row.split("#").map(pack_east).join("#") })
 }
 
 fn spin(rows: List[Str]) -> List[Str] {
@@ -83,7 +88,7 @@ fn find_loop(rows: List[Str], marks: Map[Str, Int], seen: List[List[Str]], step:
   let key = rows.join("\n")
   match Map.get(marks, key) {
     Some(first) => { length: step - first, seen: seen, start: first }
-    None => find_loop(spin(rows), Map.insert(marks, key, step), seen ++ [rows], step + 1)
+    None => find_loop(spin(rows), Map.insert(marks, key, step), seen.push(rows), step + 1)
   }
 }
 
