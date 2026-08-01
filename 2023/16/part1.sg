@@ -50,7 +50,7 @@ fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
 }
 
 fn Grid.of(rows: List[Str]) -> Grid {
-  { height: rows.len(), rows: rows, width: rows.first().unwrap_or("").len() }
+  { height: rows.len(), rows:, width: rows.first().unwrap_or("").len() }
 }
 
 fn tile(grid: Grid, beam: Beam) -> Str {
@@ -94,59 +94,69 @@ fn onward(square: Str, d: Int) -> List[Int] {
 
 fn advance(beam: Beam, d: Int) -> Beam {
   if d == 0 {
-    { c: beam.c, d: d, r: beam.r - 1 }
+    { c: beam.c, d:, r: beam.r - 1 }
   } else if d == 1 {
-    { c: beam.c + 1, d: d, r: beam.r }
+    { c: beam.c + 1, d:, r: beam.r }
   } else if d == 2 {
-    { c: beam.c, d: d, r: beam.r + 1 }
+    { c: beam.c, d:, r: beam.r + 1 }
   } else {
-    { c: beam.c - 1, d: d, r: beam.r }
+    { c: beam.c - 1, d:, r: beam.r }
   }
 }
 
-/// Where a beam sits within its row: column and heading packed together.
-///
-/// Both sets below are a map of small maps keyed by row, rather than one flat map
-/// of everything. `Map.insert` costs time proportional to the map's size rather
-/// than its depth, so a flat set spends all its time copying: a row's worth of
-/// entries per insert instead of the whole grid's is what makes part 2's 440
-/// starts tractable.
+/// A row of flags, one per position, all false.
+fn flags(width: Int) -> List[Bool] {
+  List.range(0, width).map(fn(at) { false })
+}
+
+/// Both sets below are a list of rows rather than a map of anything, and that is
+/// the whole difference between this version and the one that was written before
+/// `List.put` existed. Every position is known in advance — the grid is a
+/// rectangle — so the position *is* the key, and nothing has to be allocated,
+/// hashed or compared to reach it. The earlier version keyed a `Map` by row and
+/// each row by a packed column, because a map of small maps was the only way to
+/// stop `Map.insert` copying the whole grid on every write.
+fn flag_grid(height: Int, width: Int) -> List[List[Bool]] {
+  List.range(0, height).map(fn(at) { flags(width) })
+}
+
+fn flag_at(grid: List[List[Bool]], r: Int, at: Int) -> Bool {
+  grid.get(r).unwrap_or([]).get(at).unwrap_or(false)
+}
+
+fn flag_set(grid: List[List[Bool]], r: Int, at: Int) -> List[List[Bool]] {
+  grid.update(r, fn(row) { row.put(at, true) })
+}
+
+/// Where a beam sits within its row: column and heading packed together, so one
+/// row of the `seen` grid is four flags per column.
 fn mark(beam: Beam) -> Int {
   beam.c * 4 + beam.d
 }
 
-fn seen_has(seen: Map[Int, Map[Int, Bool]], beam: Beam) -> Bool {
-  match Map.get(seen, beam.r) {
-    None => false
-    Some(row) => Map.has(row, mark(beam))
-  }
+fn seen_has(seen: List[List[Bool]], beam: Beam) -> Bool {
+  flag_at(seen, beam.r, mark(beam))
 }
 
-fn seen_add(seen: Map[Int, Map[Int, Bool]], beam: Beam) -> Map[Int, Map[Int, Bool]] {
-  let row = Map.get(seen, beam.r).unwrap_or(Map.empty())
-  Map.insert(seen, beam.r, Map.insert(row, mark(beam), true))
+fn seen_add(seen: List[List[Bool]], beam: Beam) -> List[List[Bool]] {
+  flag_set(seen, beam.r, mark(beam))
 }
 
-/// Lit tiles need no heading, so these are keyed by column alone. Re-lighting a
-/// tile is the common case and must not pay for an insert.
-fn light(lit: Map[Int, Map[Int, Bool]], beam: Beam) -> Map[Int, Map[Int, Bool]] {
-  let row = Map.get(lit, beam.r).unwrap_or(Map.empty())
-  if Map.has(row, beam.c) {
-    lit
-  } else {
-    Map.insert(lit, beam.r, Map.insert(row, beam.c, true))
-  }
+/// Lit tiles need no heading, so these are flagged by column alone. Re-lighting a
+/// tile writes the flag that is already there, which is what it costs to say.
+fn light(lit: List[List[Bool]], beam: Beam) -> List[List[Bool]] {
+  flag_set(lit, beam.r, beam.c)
 }
 
 /// How far one straight run got: the tiles it lit, and the mirror or splitter it
 /// stopped on, if it stopped rather than left the grid.
-type Step = { lit: Map[Int, Map[Int, Bool]], stop: Option[Beam] }
+type Step = { lit: List[List[Bool]], stop: Option[Beam] }
 
 /// Empty space cannot turn a beam, so a run of `.` is one slide rather than one
 /// step per tile.
-fn slide(grid: Grid, beam: Beam, lit: Map[Int, Map[Int, Bool]]) -> Step {
+fn slide(grid: Grid, beam: Beam, lit: List[List[Bool]]) -> Step {
   if not inside(grid, beam) {
-    { lit: lit, stop: None }
+    { lit:, stop: None }
   } else {
     let marked = light(lit, beam)
     if tile(grid, beam) == "." {
@@ -164,29 +174,29 @@ fn slide(grid: Grid, beam: Beam, lit: Map[Int, Map[Int, Bool]]) -> Step {
 fn trace(
   grid: Grid,
   stack: List[Beam],
-  seen: Map[Int, Map[Int, Bool]],
-  lit: Map[Int, Map[Int, Bool]],
-) -> Map[Int, Map[Int, Bool]] {
+  seen: List[List[Bool]],
+  lit: List[List[Bool]],
+) -> List[List[Bool]] {
   match stack.first() {
     None => lit
     Some(beam) => {
-      let next = onward(tile(grid, beam), beam.d).fold(
-        { lit: lit, seen: seen, stack: stack.drop(1) },
+      let { lit:, seen:, stack: } = onward(tile(grid, beam), beam.d).fold(
+        { lit:, seen:, stack: stack.drop(1) },
         fn(acc, d) {
-          let step = slide(grid, advance(beam, d), acc.lit)
-          match step.stop {
-            None => { lit: step.lit, seen: acc.seen, stack: acc.stack }
+          let { lit:, stop: } = slide(grid, advance(beam, d), acc.lit)
+          match stop {
+            None => { lit:, seen: acc.seen, stack: acc.stack }
             Some(hit) => {
               if seen_has(acc.seen, hit) {
-                { lit: step.lit, seen: acc.seen, stack: acc.stack }
+                { lit:, seen: acc.seen, stack: acc.stack }
               } else {
-                { lit: step.lit, seen: seen_add(acc.seen, hit), stack: acc.stack.push(hit) }
+                { lit:, seen: seen_add(acc.seen, hit), stack: acc.stack.push(hit) }
               }
             }
           }
         },
       )
-      trace(grid, next.stack, next.seen, next.lit)
+      trace(grid, stack, seen, lit)
     }
   }
 }
@@ -194,12 +204,12 @@ fn trace(
 /// The walk starts with a slide, since the entry tile need not be a mirror; if
 /// that slide leaves the grid there is nothing to trace.
 fn energised(grid: Grid, start: Beam) -> Int {
-  let first = slide(grid, start, Map.empty())
-  let lit = match first.stop {
-    None => first.lit
-    Some(hit) => trace(grid, [hit], seen_add(Map.empty(), hit), first.lit)
+  let { lit:, stop: } = slide(grid, start, flag_grid(grid.height, grid.width))
+  let lit = match stop {
+    None => lit
+    Some(hit) => trace(grid, [hit], seen_add(flag_grid(grid.height, grid.width * 4), hit), lit)
   }
-  Map.values(lit).map(Map.len).sum()
+  lit.map(fn(row) { row.count(fn(flag) { flag }) }).sum()
 }
 
 fn main(sys: Sys) -> Result[Unit, Str] {

@@ -15,8 +15,10 @@
 /// in increasing order. Each bucket is dropped once processed, which matters a
 /// great deal here — see `SIGIL-NOTES.md`, but briefly, `Map.insert` costs time
 /// proportional to the map's size, so the frontier is kept narrow on purpose. The
-/// distance table is bucketed by row for the same reason: keying one flat map by
-/// the state, either as a record or as a packed integer, measures 13x slower.
+/// distance table used to be bucketed by row for the same reason — keying one
+/// flat map by the state, as a record or as a packed integer, measured 13x
+/// slower. It is a `List` now, written through `List.put`, so a state's position
+/// reaches its cell directly and the bucketing is gone.
 ///
 /// Advent of Code 2023, day 17, part 1. A Sigil implementation —
 /// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
@@ -40,7 +42,7 @@ type Step = { cost: Int, state: State }
 
 /// The frontier, as distance to the states waiting there, alongside the best
 /// distance known for each state.
-type Search = { best: Map[Int, Map[Int, Int]], frontier: Map[Int, List[State]] }
+type Search = { best: List[List[Option[Int]]], frontier: Map[Int, List[State]] }
 
 /// How few and how many blocks one run may cross.
 const SHORTEST: Int = 1
@@ -64,20 +66,30 @@ fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
 /// every block read is the kind of cost that hides well and dominates completely.
 fn Grid.of(rows: List[Str]) -> Result[Grid, Str] {
   let cells = rows.try_map(fn(row) { row.chars().try_map(Int.parse) })?
-  Ok({ cells: cells, height: rows.len(), width: rows.first().unwrap_or("").len() })
+  Ok({ cells:, height: rows.len(), width: rows.first().unwrap_or("").len() })
 }
 
 fn slot(state: State) -> Int {
   state.c * 2 + state.axis
 }
 
-fn best_of(best: Map[Int, Map[Int, Int]], state: State) -> Option[Int] {
-  Map.get(best, state.r).and_then(fn(row) { Map.get(row, slot(state)) })
+/// One cell per state, and every state is known in advance: a block, and which
+/// axis the run that reached it was on. That is what `List.put` buys — the
+/// position is the key, so nothing is allocated or compared to reach a cell.
+/// Before it existed this was a `Map` of small `Map`s bucketed by row, because a
+/// flat `Map` grew until its insert cost dominated.
+fn blank(grid: Grid) -> List[List[Option[Int]]] {
+  List.range(0, grid.height).map(fn(at) {
+    List.range(0, grid.width * 2).map(fn(c) { None })
+  })
 }
 
-fn set_best(best: Map[Int, Map[Int, Int]], state: State, cost: Int) -> Map[Int, Map[Int, Int]] {
-  let row = Map.get(best, state.r).unwrap_or(Map.empty())
-  Map.insert(best, state.r, Map.insert(row, slot(state), cost))
+fn best_of(best: List[List[Option[Int]]], state: State) -> Option[Int] {
+  best.get(state.r).unwrap_or([]).get(slot(state)).unwrap_or(None)
+}
+
+fn set_best(best: List[List[Option[Int]]], state: State, cost: Int) -> List[List[Option[Int]]] {
+  best.update(state.r, fn(row) { row.put(slot(state), Some(cost)) })
 }
 
 fn heat(grid: Grid, r: Int, c: Int) -> Int {
@@ -101,7 +113,7 @@ fn ray(grid: Grid, from: State, dr: Int, dc: Int, axis: Int, k: Int, paid: Int, 
     } else {
       let running = paid + heat(grid, nr, nc)
       let gathered = if k >= SHORTEST {
-        found.push({ cost: running, state: { axis: axis, c: nc, r: nr } })
+        found.push({ cost: running, state: { axis:, c: nc, r: nr } })
       } else {
         found
       }
@@ -167,7 +179,7 @@ fn run(grid: Grid, search: Search, at: Int, limit: Int) -> Result[Int, Str] {
 fn least_heat(grid: Grid) -> Result[Int, Str] {
   let starts = [{ axis: 0, c: 0, r: 0 }, { axis: 1, c: 0, r: 0 }]
   let search = {
-    best: starts.fold(Map.empty(), fn(best, state) { set_best(best, state, 0) }),
+    best: starts.fold(blank(grid), fn(best, state) { set_best(best, state, 0) }),
     frontier: Map.insert(Map.empty(), 0, starts),
   }
   run(grid, search, 0, grid.height * grid.width * 9)

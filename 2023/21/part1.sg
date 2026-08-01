@@ -40,7 +40,7 @@ fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
 }
 
 fn Grid.of(rows: List[Str]) -> Grid {
-  { height: rows.len(), rows: rows, width: rows.first().unwrap_or("").len() }
+  { height: rows.len(), rows:, width: rows.first().unwrap_or("").len() }
 }
 
 fn tile(grid: Grid, at: Plot) -> Str {
@@ -54,7 +54,7 @@ fn start_of(grid: Grid) -> Result[Plot, Str] {
   List.range(0, grid.height).flat_map(fn(r) {
     match Str.index_of(grid.rows.get(r).unwrap_or(""), "S") {
       None => []
-      Some(c) => [{ c: c, r: r }]
+      Some(c) => [{ c:, r: }]
     }
   }).first().ok_or("no starting position")
 }
@@ -68,14 +68,24 @@ fn neighbours(at: Plot) -> List[Plot] {
   ]
 }
 
-/// Visited plots are bucketed by row: one flat map would grow large enough that
-/// its insert cost dominates. See `SIGIL-NOTES.md`.
-fn seen_at(seen: Map[Int, Map[Int, Bool]], at: Plot) -> Bool {
-  Map.get(seen, at.r).map(fn(row) { Map.has(row, at.c) }).unwrap_or(false)
+/// Visited plots are a flag per plot, in a grid the same shape as the map.
+///
+/// This used to be a map of small maps bucketed by row, because a flat `Map`
+/// grew until its insert cost dominated and there was no way to write one
+/// element of a `List`. `List.put` is that way, and the position is the key:
+/// nothing is allocated, hashed or compared to reach a plot. Off-map plots
+/// cannot reach here — `tile` answers `#` for them and `sweep` drops them
+/// first.
+fn blank(grid: Grid) -> List[List[Bool]] {
+  List.range(0, grid.height).map(fn(at) { List.range(0, grid.width).map(fn(c) { false }) })
 }
 
-fn mark(seen: Map[Int, Map[Int, Bool]], at: Plot) -> Map[Int, Map[Int, Bool]] {
-  Map.insert(seen, at.r, Map.insert(Map.get(seen, at.r).unwrap_or(Map.empty()), at.c, true))
+fn seen_at(seen: List[List[Bool]], at: Plot) -> Bool {
+  seen.get(at.r).unwrap_or([]).get(at.c).unwrap_or(false)
+}
+
+fn mark(seen: List[List[Bool]], at: Plot) -> List[List[Bool]] {
+  seen.update(at.r, fn(row) { row.put(at.c, true) })
 }
 
 /// Sweeps outward, counting the plots whose distance matches the target parity.
@@ -83,25 +93,25 @@ fn mark(seen: Map[Int, Map[Int, Bool]], at: Plot) -> Map[Int, Map[Int, Bool]] {
 /// neighbours of the frontier that land on the same plot cannot both pass, since
 /// the first marks it. That avoids `List.uniq`, which is quadratic; see
 /// `SIGIL-NOTES.md`.
-fn sweep(grid: Grid, frontier: List[Plot], seen: Map[Int, Map[Int, Bool]], step: Int, steps: Int, reached: Int) -> Int {
+fn sweep(grid: Grid, frontier: List[Plot], seen: List[List[Bool]], step: Int, steps: Int, reached: Int) -> Int {
   if step > steps or frontier.is_empty() {
     reached
   } else {
-    let stepped = frontier.flat_map(neighbours).fold({ fresh: [], seen: seen }, fn(state, at) {
+    let { fresh:, seen: } = frontier.flat_map(neighbours).fold({ fresh: [], seen: }, fn(state, at) {
       if tile(grid, at) == "#" or seen_at(state.seen, at) {
         state
       } else {
         { fresh: state.fresh.push(at), seen: mark(state.seen, at) }
       }
     })
-    let counted = if (step + 1) % 2 == steps % 2 { reached + stepped.fresh.len() } else { reached }
-    sweep(grid, stepped.fresh, stepped.seen, step + 1, steps, counted)
+    let counted = if (step + 1) % 2 == steps % 2 { reached + fresh.len() } else { reached }
+    sweep(grid, fresh, seen, step + 1, steps, counted)
   }
 }
 
 fn reachable(grid: Grid, from: Plot, steps: Int) -> Int {
   let seeded = if steps % 2 == 0 { 1 } else { 0 }
-  sweep(grid, [from], mark(Map.empty(), from), 0, steps, seeded)
+  sweep(grid, [from], mark(blank(grid), from), 0, steps, seeded)
 }
 
 fn main(sys: Sys) -> Result[Unit, Str] {

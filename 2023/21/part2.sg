@@ -62,7 +62,7 @@ fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
 }
 
 fn Grid.of(rows: List[Str]) -> Grid {
-  { height: rows.len(), rows: rows, width: rows.first().unwrap_or("").len() }
+  { height: rows.len(), rows:, width: rows.first().unwrap_or("").len() }
 }
 
 /// The map repeats, so coordinates wrap. `%` follows the sign of the dividend, so
@@ -84,7 +84,7 @@ fn start_of(grid: Grid) -> Result[Plot, Str] {
   List.range(0, grid.height).flat_map(fn(r) {
     match Str.index_of(grid.rows.get(r).unwrap_or(""), "S") {
       None => []
-      Some(c) => [{ c: c, r: r }]
+      Some(c) => [{ c:, r: }]
     }
   }).first().ok_or("no starting position")
 }
@@ -98,14 +98,31 @@ fn neighbours(at: Plot) -> List[Plot] {
   ]
 }
 
-/// Visited plots are bucketed by row: one flat map would grow large enough that
-/// its insert cost dominates. See `SIGIL-NOTES.md`.
-fn seen_at(seen: Map[Int, Map[Int, Bool]], at: Plot) -> Bool {
-  Map.get(seen, at.r).map(fn(row) { Map.has(row, at.c) }).unwrap_or(false)
+/// Visited plots are a flag per plot, in a square big enough to hold everything
+/// the sweep touches, so the wrapped map's infinite extent never has to be
+/// represented.
+///
+/// The radius is `steps + 1`, not `steps`, and that boundary is the one thing
+/// here worth reading twice: the last round generates and *marks* the
+/// neighbours one step past the target before the recursion notices it is done.
+/// The map version accepted those marks silently, since a `Map` has a key
+/// wherever you put one. A radius of `steps` raised `E0619` on the first run.
+///
+/// This used to be a map of small maps bucketed by row, because a flat `Map`
+/// grew until its insert cost dominated and there was no way to write one
+/// element of a `List`. The plot's own coordinates are the key now, shifted so
+/// the start sits at the middle.
+fn blank(steps: Int) -> List[List[Bool]] {
+  let side = 2 * (steps + 1) + 1
+  List.range(0, side).map(fn(at) { List.range(0, side).map(fn(c) { false }) })
 }
 
-fn mark(seen: Map[Int, Map[Int, Bool]], at: Plot) -> Map[Int, Map[Int, Bool]] {
-  Map.insert(seen, at.r, Map.insert(Map.get(seen, at.r).unwrap_or(Map.empty()), at.c, true))
+fn seen_at(seen: List[List[Bool]], from: Plot, steps: Int, at: Plot) -> Bool {
+  seen.get(at.r - from.r + steps + 1).unwrap_or([]).get(at.c - from.c + steps + 1).unwrap_or(false)
+}
+
+fn mark(seen: List[List[Bool]], from: Plot, steps: Int, at: Plot) -> List[List[Bool]] {
+  seen.update(at.r - from.r + steps + 1, fn(row) { row.put(at.c - from.c + steps + 1, true) })
 }
 
 /// Sweeps outward, counting the plots whose distance matches the target parity.
@@ -113,25 +130,25 @@ fn mark(seen: Map[Int, Map[Int, Bool]], at: Plot) -> Map[Int, Map[Int, Bool]] {
 /// neighbours of the frontier that land on the same plot cannot both pass, since
 /// the first marks it. That avoids `List.uniq`, which is quadratic; see
 /// `SIGIL-NOTES.md`.
-fn sweep(grid: Grid, frontier: List[Plot], seen: Map[Int, Map[Int, Bool]], step: Int, steps: Int, reached: Int) -> Int {
+fn sweep(grid: Grid, from: Plot, frontier: List[Plot], seen: List[List[Bool]], step: Int, steps: Int, reached: Int) -> Int {
   if step > steps or frontier.is_empty() {
     reached
   } else {
-    let stepped = frontier.flat_map(neighbours).fold({ fresh: [], seen: seen }, fn(state, at) {
-      if tile(grid, at) == "#" or seen_at(state.seen, at) {
+    let { fresh:, seen: } = frontier.flat_map(neighbours).fold({ fresh: [], seen: }, fn(state, at) {
+      if tile(grid, at) == "#" or seen_at(state.seen, from, steps, at) {
         state
       } else {
-        { fresh: state.fresh.push(at), seen: mark(state.seen, at) }
+        { fresh: state.fresh.push(at), seen: mark(state.seen, from, steps, at) }
       }
     })
-    let counted = if (step + 1) % 2 == steps % 2 { reached + stepped.fresh.len() } else { reached }
-    sweep(grid, stepped.fresh, stepped.seen, step + 1, steps, counted)
+    let counted = if (step + 1) % 2 == steps % 2 { reached + fresh.len() } else { reached }
+    sweep(grid, from, fresh, seen, step + 1, steps, counted)
   }
 }
 
 fn reachable(grid: Grid, from: Plot, steps: Int) -> Int {
   let seeded = if steps % 2 == 0 { 1 } else { 0 }
-  sweep(grid, [from], mark(Map.empty(), from), 0, steps, seeded)
+  sweep(grid, from, [from], mark(blank(steps), from, steps, from), 0, steps, seeded)
 }
 
 /// Fits the quadratic through ring zero's count and reads off ring `n`. Written
