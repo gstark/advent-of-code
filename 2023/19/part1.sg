@@ -6,30 +6,12 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
 
 /// A rule with an empty `field` is the workflow's unconditional last resort.
 type Rule = { dest: Str, field: Str, above: Bool, value: Int }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_text(fs: Fs, path: Str) -> Result[Str, Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim())
-  }
-}
 
 fn parse_rule(text: Str) -> Result[Rule, Str] {
   let halves = text.split(":")
@@ -44,7 +26,7 @@ fn parse_rule(text: Str) -> Result[Rule, Str] {
     Ok({
       dest: halves.get(1).ok_or(bad)?,
       field: sides.get(0).ok_or(malformed)?,
-      above: above,
+      above:,
       value: Int.parse(sides.get(1).ok_or(malformed)?)?,
     })
   }
@@ -93,14 +75,14 @@ fn sort_part(workflows: Map[Str, List[Rule]], name: Str, part: Map[Str, Int]) ->
     Ok(false)
   } else {
     let rules = Map.get(workflows, name).ok_or("no such workflow: " ++ name)?
-    let rule = List.find(rules, fn(rule) { matches(rule, part) }).ok_or("no rule matched in: " ++ name)?
-    sort_part(workflows, rule.dest, part)
+    let { dest: } = List.find(rules, fn(rule) { matches(rule, part) }).ok_or("no rule matched in: " ++ name)?
+    sort_part(workflows, dest, part)
   }
 }
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let blocks = read_text(sys.fs, path)?.split("\n\n")
+  let blocks = Fs.read_text(sys.fs.read, path)?.trim().split("\n\n")
   let lines = blocks.get(0).ok_or("no workflows")?.split("\n").reject(fn(line) { line.trim() == "" })
   let parsed = lines.try_map(parse_workflow)?
   let workflows = parsed.fold(Map.empty(), fn(found, entry) { Map.insert(found, entry.name, entry.rules) })

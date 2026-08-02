@@ -7,10 +7,6 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
@@ -18,20 +14,6 @@ type Sys = { console: Console, fs: Fs, args: List[Str] }
 type Node = { left: Str, right: Str }
 
 type Network = { nodes: Map[Str, Node], turns: Str }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line.trim() == "" }))
-  }
-}
 
 /// `AAA = (BBB, CCC)` carries no information in its punctuation, so blanking it
 /// out leaves three words to name.
@@ -63,8 +45,8 @@ fn turn_at(turns: Str, step: Int) -> Str {
 }
 
 fn hop(network: Network, from: Str, step: Int) -> Result[Str, Str] {
-  let node = Map.get(network.nodes, from).ok_or("no such node: " ++ from)?
-  Ok(if turn_at(network.turns, step) == "L" { node.left } else { node.right })
+  let { left:, right: } = Map.get(network.nodes, from).ok_or("no such node: " ++ from)?
+  Ok(if turn_at(network.turns, step) == "L" { left } else { right })
 }
 
 fn walk(network: Network, at: Str, step: Int) -> Result[Int, Str] {
@@ -77,7 +59,7 @@ fn walk(network: Network, at: Str, step: Int) -> Result[Int, Str] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let network = parse_network(read_lines(sys.fs, path)?)?
+  let network = parse_network(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }))?
   sys.console.print("steps to ZZZ: " ++ Int.to_str(walk(network, "AAA", 0)?))
   Ok(())
 }

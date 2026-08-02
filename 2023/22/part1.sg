@@ -18,10 +18,6 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
@@ -37,20 +33,6 @@ type Column = { top: Int, brick: Int }
 
 /// The columns as bricks land on them, and each brick's supporters by index.
 type Stack = { supports: List[List[Int]], columns: Map[Cell, Column] }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line.trim() == "" }))
-  }
-}
 
 fn parse_end(text: Str) -> Result[List[Int], Str] {
   let parts = text.trim().split(",").try_map(Int.parse)?
@@ -82,7 +64,7 @@ fn parse_brick(line: Str) -> Result[Brick, Str] {
 /// The `(x, y)` columns a brick stands on.
 fn footprint(brick: Brick) -> List[Cell] {
   List.range(brick.lx, brick.hx + 1).flat_map(fn(x) {
-    List.range(brick.ly, brick.hy + 1).map(fn(y) { { x: x, y: y } })
+    List.range(brick.ly, brick.hy + 1).map(fn(y) { { x:, y: } })
   })
 }
 
@@ -118,7 +100,7 @@ fn load_bearing(supports: List[List[Int]]) -> List[Int] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let bricks = read_lines(sys.fs, path)?.try_map(parse_brick)?
+  let bricks = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }).try_map(parse_brick)?
   let condemned = load_bearing(settle_all(bricks).supports)
   sys.console.print("bricks: " ++ Int.to_str(bricks.len()) ++ ", load-bearing: " ++ Int.to_str(condemned.len()))
   sys.console.print("safe to disintegrate: " ++ Int.to_str(bricks.len() - condemned.len()))

@@ -24,10 +24,6 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
@@ -39,20 +35,6 @@ type Beam = { c: Int, d: Int, r: Int }
 /// the first row for its length each time matters: `inside` runs once per tile
 /// slid over, and a `List.first` plus a `Str.len` inside it is most of the work.
 type Grid = { height: Int, rows: List[Str], width: Int }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
-  }
-}
 
 fn Grid.of(rows: List[Str]) -> Grid {
   { height: rows.len(), rows:, width: rows.first().unwrap_or("").len() }
@@ -237,7 +219,7 @@ fn entries(grid: Grid) -> List[Beam] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let grid = Grid.of(read_lines(sys.fs, path)?)
+  let grid = Grid.of(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" }))
   let starts = entries(grid)
   let blank_lit = flag_grid(grid.height, grid.width)
   let blank_seen = flag_grid(grid.height, grid.width * 4)

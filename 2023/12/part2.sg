@@ -22,29 +22,11 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
 
 type Record = { groups: List[Int], springs: List[Str] }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line.trim() == "" }))
-  }
-}
 
 fn parse_record(line: Str) -> Result[Record, Str] {
   let parts = line.words()
@@ -79,9 +61,9 @@ fn damaged_runs(springs: List[Str]) -> List[Int] {
 /// Row `n` is the base case: having consumed the whole record, there is one
 /// arrangement if every group was placed and none otherwise.
 fn arrangements(record: Record) -> Int {
-  let springs = record.springs
+  let { springs:, groups: } = record
   let n = springs.len()
-  let m = record.groups.len()
+  let m = groups.len()
   let runs = damaged_runs(springs)
   let columns = List.range(0, m + 1)
   let base = [columns.map(fn(j) { if j == m { 1 } else { 0 } })]
@@ -99,7 +81,7 @@ fn arrangements(record: Record) -> Int {
         // against a `#`, which would make it longer than claimed. It lands on row
         // `i + size + 1`, past the group and its separator, except when it ends
         // the record exactly and there is no separator left to skip.
-        let size = record.groups.get(j).unwrap_or(0)
+        let size = groups.get(j).unwrap_or(0)
         if size <= run and (i + size == n or springs.get(i + size).unwrap_or(".") != "#") {
           rows.get(Int.min(size, n - i - 1)).and_then(fn(row) { row.get(j + 1) }).unwrap_or(0)
         } else {
@@ -114,7 +96,7 @@ fn arrangements(record: Record) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let records = read_lines(sys.fs, path)?.try_map(parse_record)?
+  let records = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }).try_map(parse_record)?
   sys.console.print("sum of arrangements: " ++ Int.to_str(records.map(arrangements).sum()))
   Ok(())
 }

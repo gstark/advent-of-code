@@ -32,10 +32,6 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
@@ -55,20 +51,6 @@ type Search = { best: List[List[Option[Int]]], frontier: Map[Int, List[State]] }
 /// How few and how many blocks one run may cross.
 const SHORTEST: Int = 4
 const LONGEST: Int = 10
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
-  }
-}
 
 /// Digits are parsed once into a table. Re-slicing and re-parsing the text on
 /// every block read is the kind of cost that hides well and dominates completely.
@@ -195,7 +177,7 @@ fn least_heat(grid: Grid) -> Result[Int, Str] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let grid = Grid.of(read_lines(sys.fs, path)?)?
+  let grid = Grid.of(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" }))?
   sys.console.print("least heat loss: " ++ Int.to_str(least_heat(grid)?))
   Ok(())
 }

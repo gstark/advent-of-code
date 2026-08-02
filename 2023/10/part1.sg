@@ -18,29 +18,11 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
 
 type Point = { c: Int, r: Int }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
-  }
-}
 
 /// Anything off the edge reads as ground, which keeps the edges from needing a
 /// special case anywhere else.
@@ -71,7 +53,7 @@ fn exits(pipe: Str, at: Point) -> List[Point] {
 
 fn find_start(grid: List[Str]) -> Result[Point, Str] {
   List.range(0, grid.len()).zip(grid).flat_map(fn(row) {
-    row.second.index_of("S").map(fn(c) { { c: c, r: row.first } }).to_list()
+    row.second.index_of("S").map(fn(c) { { c:, r: row.first } }).to_list()
   }).first().ok_or("no start tile")
 }
 
@@ -97,7 +79,7 @@ fn walk(grid: List[Str], start: Point, from: Point, at: Point, steps: Int) -> Re
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let grid = read_lines(sys.fs, path)?
+  let grid = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" })
   let start = find_start(grid)?
   let first = loop_end(grid, start).ok_or("the start tile connects to nothing")?
   let length = walk(grid, start, start, first, 1)?

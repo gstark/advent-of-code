@@ -15,10 +15,6 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
@@ -28,20 +24,6 @@ type Num = { hi: Int, lo: Int, row: Int, value: Int }
 
 /// The state `row_numbers` folds: `start` is -1 when no run is open.
 type Scan = { digits: Str, out: List[Num], start: Int }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
-  }
-}
 
 fn is_digit(character: Str) -> Bool {
   Result.is_ok(Int.parse(character))
@@ -58,7 +40,7 @@ fn Scan.flush(scan: Scan, row: Int, col: Int) -> Scan {
   if scan.start == -1 {
     scan
   } else {
-    let found = { hi: col - 1, lo: scan.start, row: row, value: Int.parse(scan.digits).unwrap_or(0) }
+    let found = { hi: col - 1, lo: scan.start, row:, value: Int.parse(scan.digits).unwrap_or(0) }
     { digits: "", out: scan.out.push(found), start: -1 }
   }
 }
@@ -68,7 +50,7 @@ fn Scan.flush(scan: Scan, row: Int, col: Int) -> Scan {
 fn row_numbers(row: Int, line: Str) -> List[Num] {
   let characters = line.chars()
   let width = characters.len()
-  let scanned = List.range(0, width + 1).fold({ digits: "", out: [], start: -1 }, fn(scan, col) {
+  let { out: } = List.range(0, width + 1).fold({ digits: "", out: [], start: -1 }, fn(scan, col) {
     let character = characters.get(col).unwrap_or(".")
     if is_digit(character) {
       if scan.start == -1 {
@@ -80,7 +62,7 @@ fn row_numbers(row: Int, line: Str) -> List[Num] {
       Scan.flush(scan, row, col)
     }
   })
-  scanned.out
+  out
 }
 
 fn numbers(lines: List[Str]) -> List[Num] {
@@ -110,7 +92,7 @@ fn ring(found: Num) -> List[Int] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let lines = read_lines(sys.fs, path)?
+  let lines = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" })
   let cells = symbol_cells(lines)
   let parts = numbers(lines).filter(fn(found) { ring(found).any(fn(at) { Map.has(cells, at) }) })
   sys.console.print("sum of part numbers: " ++ Int.to_str(parts.map(fn(found) { found.value }).sum()))

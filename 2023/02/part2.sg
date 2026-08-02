@@ -8,10 +8,6 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
@@ -19,20 +15,6 @@ type Sys = { console: Console, fs: Fs, args: List[Str] }
 type Draw = { blue: Int, green: Int, red: Int }
 
 type Game = { draws: List[Draw], id: Int }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
-  }
-}
 
 fn Draw.zero() -> Draw {
   { blue: 0, green: 0, red: 0 }
@@ -64,7 +46,7 @@ fn parse_game(line: Str) -> Result[Game, Str] {
   let heading = halves.get(0).ok_or(malformed)?
   let body = halves.get(1).ok_or(malformed)?
   let id = Int.parse(heading.words().get(1).ok_or("expected `Game <id>`, got: " ++ heading)?)?
-  Ok({ draws: body.split(";").try_map(parse_draw)?, id: id })
+  Ok({ draws: body.split(";").try_map(parse_draw)?, id: })
 }
 
 /// The smallest bag that could have played this game.
@@ -78,7 +60,7 @@ fn power(draw: Draw) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let games = read_lines(sys.fs, path)?.try_map(parse_game)?
+  let games = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" }).try_map(parse_game)?
   let total = games.map(fn(game) { power(fewest(game)) }).sum()
   sys.console.print("sum of set powers: " ++ Int.to_str(total))
   Ok(())

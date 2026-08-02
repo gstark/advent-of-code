@@ -15,10 +15,6 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
@@ -34,20 +30,6 @@ type Machine = { flips: Map[Str, Bool], memory: Map[Str, Map[Str, Bool]] }
 
 type Counted = { high: Int, low: Int, machine: Machine }
 
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line.trim() == "" }))
-  }
-}
-
 fn parse_module(line: Str) -> Result[{ key: Str, value: Module }, Str] {
   let complaint = "expected `<name> -> <dests>`, got: " ++ line
   let halves = line.split("->")
@@ -55,8 +37,8 @@ fn parse_module(line: Str) -> Result[{ key: Str, value: Module }, Str] {
   let dests = halves.get(1).ok_or(complaint)?.split(",").map(fn(dest) { dest.trim() }).reject(fn(dest) { dest == "" })
   let kind = left.slice(0, 1)
   match left.strip_prefix("%").or_else(fn() { left.strip_prefix("&") }) {
-    Some(name) => Ok({ key: name, value: { dests: dests, kind: kind } })
-    None => Ok({ key: left, value: { dests: dests, kind: "b" } })
+    Some(name) => Ok({ key: name, value: { dests:, kind: } })
+    None => Ok({ key: left, value: { dests:, kind: "b" } })
   }
 }
 
@@ -77,12 +59,12 @@ fn initial(modules: Map[Str, Module]) -> Machine {
       }
     })
   })
-  { flips: Map.empty(), memory: memory }
+  { flips: Map.empty(), memory: }
 }
 
 /// The same pulse to every destination of one module.
 fn fan(from: Str, dests: List[Str], high: Bool) -> List[Pulse] {
-  dests.map(fn(dest) { { from: from, high: high, to: dest } })
+  dests.map(fn(dest) { { from:, high:, to: dest } })
 }
 
 /// What one module does with one pulse: the new machine state, and whatever it
@@ -90,13 +72,13 @@ fn fan(from: Str, dests: List[Str], high: Bool) -> List[Pulse] {
 /// pulse.
 fn deliver(modules: Map[Str, Module], machine: Machine, pulse: Pulse) -> { machine: Machine, sent: List[Pulse] }{
   match Map.get(modules, pulse.to) {
-    None => { machine: machine, sent: [] }
+    None => { machine:, sent: [] }
     Some(module) => {
       if module.kind == "b" {
-        { machine: machine, sent: fan(pulse.to, module.dests, pulse.high) }
+        { machine:, sent: fan(pulse.to, module.dests, pulse.high) }
       } else if module.kind == "%" {
         if pulse.high {
-          { machine: machine, sent: [] }
+          { machine:, sent: [] }
         } else {
           let turned = not Map.get(machine.flips, pulse.to).unwrap_or(false)
           {
@@ -119,17 +101,16 @@ fn wave(modules: Map[Str, Module], carried: Counted, flying: List[Pulse]) -> Cou
   if flying.is_empty() {
     carried
   } else {
-    let stepped = flying.fold({ machine: carried.machine, sent: [] }, fn(state, pulse) {
-      let acted = deliver(modules, state.machine, pulse)
-      { machine: acted.machine, sent: state.sent ++ acted.sent }
+    let { machine:, sent: } = flying.fold({ machine: carried.machine, sent: [] }, fn(state, pulse) {
+      let { machine:, sent: } = deliver(modules, state.machine, pulse)
+      { machine:, sent: state.sent ++ sent }
     })
-    let onward = stepped.sent
-    let highs = onward.count(fn(pulse) { pulse.high })
+    let highs = sent.count(fn(pulse) { pulse.high })
     wave(modules, {
       high: carried.high + highs,
-      low: carried.low + onward.len() - highs,
-      machine: stepped.machine,
-    }, onward)
+      low: carried.low + sent.len() - highs,
+      machine:,
+    }, sent)
   }
 }
 
@@ -142,15 +123,15 @@ fn press(modules: Map[Str, Module], carried: Counted) -> Counted {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let modules = parse_machine(read_lines(sys.fs, path)?)?
+  let modules = parse_machine(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }))?
   let presses = match sys.args.get(1) {
     None => 1000
     Some(raw) => Int.parse(raw)?
   }
-  let done = List.range(0, presses).fold({ high: 0, low: 0, machine: initial(modules) }, fn(carried, index) {
+  let { high:, low: } = List.range(0, presses).fold({ high: 0, low: 0, machine: initial(modules) }, fn(carried, index) {
     press(modules, carried)
   })
-  sys.console.print("low: " ++ Int.to_str(done.low) ++ ", high: " ++ Int.to_str(done.high))
-  sys.console.print("product: " ++ Int.to_str(done.low * done.high))
+  sys.console.print("low: " ++ Int.to_str(low) ++ ", high: " ++ Int.to_str(high))
+  sys.console.print("product: " ++ Int.to_str(low * high))
   Ok(())
 }

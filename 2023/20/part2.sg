@@ -26,10 +26,6 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
@@ -47,20 +43,6 @@ type Machine = { flips: Map[Str, Bool], memory: Map[Str, Map[Str, Bool]] }
 /// first seen sending a high pulse.
 type Counted = { found: Map[Str, Int], machine: Machine }
 
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line.trim() == "" }))
-  }
-}
-
 fn parse_module(line: Str) -> Result[{ key: Str, value: Module }, Str] {
   let complaint = "expected `<name> -> <dests>`, got: " ++ line
   let halves = line.split("->")
@@ -68,8 +50,8 @@ fn parse_module(line: Str) -> Result[{ key: Str, value: Module }, Str] {
   let dests = halves.get(1).ok_or(complaint)?.split(",").map(fn(dest) { dest.trim() }).reject(fn(dest) { dest == "" })
   let kind = left.slice(0, 1)
   match left.strip_prefix("%").or_else(fn() { left.strip_prefix("&") }) {
-    Some(name) => Ok({ key: name, value: { dests: dests, kind: kind } })
-    None => Ok({ key: left, value: { dests: dests, kind: "b" } })
+    Some(name) => Ok({ key: name, value: { dests:, kind: } })
+    None => Ok({ key: left, value: { dests:, kind: "b" } })
   }
 }
 
@@ -90,12 +72,12 @@ fn initial(modules: Map[Str, Module]) -> Machine {
       }
     })
   })
-  { flips: Map.empty(), memory: memory }
+  { flips: Map.empty(), memory: }
 }
 
 /// The same pulse to every destination of one module.
 fn fan(from: Str, dests: List[Str], high: Bool) -> List[Pulse] {
-  dests.map(fn(dest) { { from: from, high: high, to: dest } })
+  dests.map(fn(dest) { { from:, high:, to: dest } })
 }
 
 /// What one module does with one pulse: the new machine state, and whatever it
@@ -103,13 +85,13 @@ fn fan(from: Str, dests: List[Str], high: Bool) -> List[Pulse] {
 /// pulse.
 fn deliver(modules: Map[Str, Module], machine: Machine, pulse: Pulse) -> { machine: Machine, sent: List[Pulse] }{
   match Map.get(modules, pulse.to) {
-    None => { machine: machine, sent: [] }
+    None => { machine:, sent: [] }
     Some(module) => {
       if module.kind == "b" {
-        { machine: machine, sent: fan(pulse.to, module.dests, pulse.high) }
+        { machine:, sent: fan(pulse.to, module.dests, pulse.high) }
       } else if module.kind == "%" {
         if pulse.high {
-          { machine: machine, sent: [] }
+          { machine:, sent: [] }
         } else {
           let turned = not Map.get(machine.flips, pulse.to).unwrap_or(false)
           {
@@ -144,15 +126,14 @@ fn wave(modules: Map[Str, Module], feeder: Str, at: Int, carried: Counted, flyin
   if flying.is_empty() {
     carried
   } else {
-    let stepped = flying.fold({ machine: carried.machine, sent: [] }, fn(state, pulse) {
-      let acted = deliver(modules, state.machine, pulse)
-      { machine: acted.machine, sent: state.sent ++ acted.sent }
+    let { machine:, sent: } = flying.fold({ machine: carried.machine, sent: [] }, fn(state, pulse) {
+      let { machine:, sent: } = deliver(modules, state.machine, pulse)
+      { machine:, sent: state.sent ++ sent }
     })
-    let onward = stepped.sent
     wave(modules, feeder, at, {
-      found: watch(carried.found, feeder, at, onward),
-      machine: stepped.machine,
-    }, onward)
+      found: watch(carried.found, feeder, at, sent),
+      machine:,
+    }, sent)
   }
 }
 
@@ -188,7 +169,7 @@ fn until_found(modules: Map[Str, Module], feeder: Str, wanted: Int, at: Int, lim
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let modules = parse_machine(read_lines(sys.fs, path)?)?
+  let modules = parse_machine(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }))?
   let feeders = feeding(modules, "rx")
   Result.require(feeders.len() == 1,
     "expected exactly one module feeding rx, found " ++ Int.to_str(feeders.len()))?
@@ -196,8 +177,8 @@ fn main(sys: Sys) -> Result[Unit, Str] {
   let kind = Map.get(modules, feeder).map(fn(module) { module.kind }).unwrap_or("")
   Result.require(kind == "&", "expected rx to be fed by a conjunction, found kind `" ++ kind ++ "`")?
   let watched = feeding(modules, feeder)
-  let done = until_found(modules, feeder, watched.len(), 1, 100000, { found: Map.empty(), machine: initial(modules) })?
-  let periods = Map.values(done.found)
+  let { found: } = until_found(modules, feeder, watched.len(), 1, 100000, { found: Map.empty(), machine: initial(modules) })?
+  let periods = Map.values(found)
   sys.console.print("rx is fed by " ++ feeder ++ " via " ++ Int.to_str(watched.len()) ++ " inputs")
   sys.console.print("periods: " ++ periods.map(Int.to_str).join(" "))
   sys.console.print("button presses until rx goes low: " ++ Int.to_str(periods.fold(1, lcm)))

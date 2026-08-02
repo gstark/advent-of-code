@@ -17,28 +17,15 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
 
 type Lens = { focal: Int, label: Str }
 
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
 fn read_steps(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.replace("\n", "").trim().split(",").reject(fn(step) { step == "" }))
-  }
+  let text = Fs.read_text(fs.read, path)?
+  Ok(text.replace("\n", "").trim().split(",").reject(fn(step) { step == "" }))
 }
 
 fn hash(text: Str) -> Int {
@@ -67,7 +54,7 @@ fn apply(boxes: Map[Int, List[Lens]], step: Str) -> Result[Map[Int, List[Lens]],
       let label = halves.get(0).ok_or("expected `<label>=<focal>` or `<label>-`, got: " ++ step)?
       let focal = Int.parse(halves.get(1).ok_or("expected a focal length, got: " ++ step)?)?
       Ok(Map.update(boxes, hash(label), fn(box) {
-        install(box.unwrap_or([]), { focal: focal, label: label })
+        install(box.unwrap_or([]), { focal:, label: })
       }))
     }
   }

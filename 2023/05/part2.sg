@@ -15,10 +15,6 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
@@ -30,20 +26,6 @@ type Rule = { dst: Int, len: Int, src: Int }
 type Interval = { hi: Int, lo: Int }
 
 type Almanac = { layers: List[List[Rule]], seeds: List[Int] }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_text(fs: Fs, path: Str) -> Result[Str, Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim())
-  }
-}
 
 fn parse_numbers(text: Str) -> Result[List[Int], Str] {
   text.words().try_map(Int.parse)
@@ -112,8 +94,8 @@ fn map_layer(spans: List[Interval], rules: List[Rule]) -> List[Interval] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let almanac = parse_almanac(read_text(sys.fs, path)?)?
-  let located = almanac.layers.fold(seed_intervals(almanac.seeds), map_layer)
+  let { layers:, seeds: } = parse_almanac(Fs.read_text(sys.fs.read, path)?.trim())?
+  let located = layers.fold(seed_intervals(seeds), map_layer)
   let lowest = located.map(fn(span) { span.lo }).min()
   sys.console.print("lowest location: " ++ Int.to_str(lowest.ok_or("no seeds")?))
   Ok(())

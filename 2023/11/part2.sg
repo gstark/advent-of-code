@@ -15,36 +15,18 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
 
 type Galaxy = { c: Int, r: Int }
 
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
-  }
-}
-
 fn galaxies(grid: List[Str]) -> List[Galaxy] {
   List.range(0, grid.len()).flat_map(fn(r) {
     let row = grid.get(r).unwrap_or("")
     List.range(0, row.len())
       .filter(fn(c) { row.slice(c, c + 1) == "#" })
-      .map(fn(c) { { c: c, r: r } })
+      .map(fn(c) { { c:, r: } })
   })
 }
 
@@ -78,7 +60,7 @@ fn total_distance(found: List[Galaxy], grid: List[Str], factor: Int) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let grid = read_lines(sys.fs, path)?
+  let grid = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" })
   let found = galaxies(grid)
   let factor = match sys.args.get(1) {
     None => 1000000

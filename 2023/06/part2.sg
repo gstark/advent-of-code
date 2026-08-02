@@ -10,29 +10,11 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
 
 type Race = { record: Int, time: Int }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.lines().reject(Str.is_empty))
-  }
-}
 
 /// Closing up the gaps is the whole of part 2's rule change: the digits after the
 /// label, joined, are the number.
@@ -75,7 +57,7 @@ fn ways(race: Race) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let race = parse_race(read_lines(sys.fs, path)?)?
+  let race = parse_race(Fs.read_lines(sys.fs.read, path)?.reject(Str.is_empty))?
   sys.console.print("ways to win the long race: " ++ Int.to_str(ways(race)))
   Ok(())
 }

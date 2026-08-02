@@ -19,10 +19,6 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
@@ -31,20 +27,6 @@ type Rule = { dest: Str, field: Str, above: Bool, value: Int }
 
 /// Inclusive at both ends; `lo > hi` means empty.
 type Span = { hi: Int, lo: Int }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_text(fs: Fs, path: Str) -> Result[Str, Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim())
-  }
-}
 
 fn parse_rule(text: Str) -> Result[Rule, Str] {
   let halves = text.split(":")
@@ -59,7 +41,7 @@ fn parse_rule(text: Str) -> Result[Rule, Str] {
     Ok({
       dest: halves.get(1).ok_or(bad)?,
       field: sides.get(0).ok_or(malformed)?,
-      above: above,
+      above:,
       value: Int.parse(sides.get(1).ok_or(malformed)?)?,
     })
   }
@@ -103,9 +85,9 @@ fn through(workflows: Map[Str, List[Rule]], rules: List[Rule], box: Map[Str, Spa
       if rule.field == "" {
         accepted(workflows, rule.dest, box)
       } else {
-        let parts = split(Map.get_or(box, rule.field, { hi: 0, lo: 1 }), rule)
-        Ok(accepted(workflows, rule.dest, Map.insert(box, rule.field, parts.passes))?
-          + through(workflows, rules.drop(1), Map.insert(box, rule.field, parts.fails))?)
+        let { fails:, passes: } = split(Map.get_or(box, rule.field, { hi: 0, lo: 1 }), rule)
+        Ok(accepted(workflows, rule.dest, Map.insert(box, rule.field, passes))?
+          + through(workflows, rules.drop(1), Map.insert(box, rule.field, fails))?)
       }
     }
   }
@@ -124,7 +106,7 @@ fn accepted(workflows: Map[Str, List[Rule]], name: Str, box: Map[Str, Span]) -> 
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let blocks = read_text(sys.fs, path)?.split("\n\n")
+  let blocks = Fs.read_text(sys.fs.read, path)?.trim().split("\n\n")
   let lines = blocks.get(0).ok_or("no workflows")?.split("\n").reject(fn(line) { line.trim() == "" })
   let parsed = lines.try_map(parse_workflow)?
   let workflows = parsed.fold(Map.empty(), fn(found, entry) { Map.insert(found, entry.name, entry.rules) })

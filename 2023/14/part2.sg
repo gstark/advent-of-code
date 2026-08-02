@@ -17,10 +17,6 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
@@ -29,20 +25,6 @@ type Sys = { console: Console, fs: Fs, args: List[Str] }
 /// round again, `length` how many cycles later that happens, and `seen` every
 /// arrangement in order, so the answer can be read straight out of it.
 type Loop = { length: Int, seen: List[List[Str]], start: Int }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line == "" }))
-  }
-}
 
 fn transpose(rows: List[Str]) -> List[Str] {
   let width = rows.first().unwrap_or("").len()
@@ -87,22 +69,22 @@ fn load(rows: List[Str]) -> Int {
 fn find_loop(rows: List[Str], marks: Map[Str, Int], seen: List[List[Str]], step: Int) -> Loop {
   let key = rows.join("\n")
   match Map.get(marks, key) {
-    Some(first) => { length: step - first, seen: seen, start: first }
+    Some(first) => { length: step - first, seen:, start: first }
     None => find_loop(spin(rows), Map.insert(marks, key, step), seen.push(rows), step + 1)
   }
 }
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let grid = read_lines(sys.fs, path)?
+  let grid = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" })
   let target = match sys.args.get(1) {
     None => 1000000000
     Some(raw) => Int.parse(raw)?
   }
-  let found = find_loop(grid, Map.empty(), [], 0)
-  let landing = found.start + (target - found.start) % found.length
-  sys.console.print("loop starts at cycle " ++ Int.to_str(found.start) ++ ", length " ++ Int.to_str(found.length))
+  let { length:, seen:, start: } = find_loop(grid, Map.empty(), [], 0)
+  let landing = start + (target - start) % length
+  sys.console.print("loop starts at cycle " ++ Int.to_str(start) ++ ", length " ++ Int.to_str(length))
   sys.console.print("load after " ++ Int.to_str(target) ++ " cycles: "
-    ++ Int.to_str(load(found.seen.get(landing).unwrap_or(grid))))
+    ++ Int.to_str(load(seen.get(landing).unwrap_or(grid))))
   Ok(())
 }

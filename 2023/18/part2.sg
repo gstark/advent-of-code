@@ -18,10 +18,6 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
@@ -31,29 +27,15 @@ type Dig = { dc: Int, distance: Int, dr: Int }
 /// Corner reached so far, the doubled shoelace sum, and the trench length.
 type Walk = { c: Int, doubled: Int, edge: Int, r: Int }
 
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.trim().split("\n").reject(fn(line) { line.trim() == "" }))
-  }
-}
-
 fn dig(letter: Str, distance: Int) -> Result[Dig, Str] {
   if letter == "R" {
-    Ok({ dc: 1, distance: distance, dr: 0 })
+    Ok({ dc: 1, distance:, dr: 0 })
   } else if letter == "L" {
-    Ok({ dc: 0 - 1, distance: distance, dr: 0 })
+    Ok({ dc: 0 - 1, distance:, dr: 0 })
   } else if letter == "U" {
-    Ok({ dc: 0, distance: distance, dr: 0 - 1 })
+    Ok({ dc: 0, distance:, dr: 0 - 1 })
   } else if letter == "D" {
-    Ok({ dc: 0, distance: distance, dr: 1 })
+    Ok({ dc: 0, distance:, dr: 1 })
   } else {
     Err("unknown direction: " ++ letter)
   }
@@ -81,17 +63,17 @@ fn parse_dig(line: Str) -> Result[Dig, Str] {
 }
 
 fn lagoon(plan: List[Dig]) -> Int {
-  let traced = plan.fold({ c: 0, doubled: 0, edge: 0, r: 0 }, fn(at, step) {
+  let { doubled:, edge: } = plan.fold({ c: 0, doubled: 0, edge: 0, r: 0 }, fn(at, step) {
     let nr = at.r + step.dr * step.distance
     let nc = at.c + step.dc * step.distance
     { c: nc, doubled: at.doubled + at.c * nr - nc * at.r, edge: at.edge + step.distance, r: nr }
   })
-  Int.abs(traced.doubled) / 2 + traced.edge / 2 + 1
+  Int.abs(doubled) / 2 + edge / 2 + 1
 }
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let plan = read_lines(sys.fs, path)?.try_map(parse_dig)?
+  let plan = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }).try_map(parse_dig)?
   sys.console.print("cubic metres of lava: " ++ Int.to_str(lagoon(plan)))
   Ok(())
 }

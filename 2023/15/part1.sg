@@ -6,28 +6,15 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
 
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
 /// The sequence is one long line, but the file ends with a newline and may have
 /// been wrapped, so every line break is dropped before splitting on commas.
 fn read_steps(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.replace("\n", "").trim().split(",").reject(fn(step) { step == "" }))
-  }
+  let text = Fs.read_text(fs.read, path)?
+  Ok(text.replace("\n", "").trim().split(",").reject(fn(step) { step == "" }))
 }
 
 fn hash(text: Str) -> Int {

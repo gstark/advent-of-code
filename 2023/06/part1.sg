@@ -12,29 +12,11 @@
 /// https://github.com/gstark/sigil — run with `sigil exec part1.sg -- input.txt`.
 type Console = { print: fn(Str) -> Unit }
 
-type FsErr =
-  | Denied(path: Str)
-  | NotFound(path: Str)
-
 type Fs = { read: fn(Str) -> Result[Str, FsErr] }
 
 type Sys = { console: Console, fs: Fs, args: List[Str] }
 
 type Race = { record: Int, time: Int }
-
-fn fs_message(error: FsErr) -> Str {
-  match error {
-    Denied(path) => "denied " ++ path
-    NotFound(path) => "not found " ++ path
-  }
-}
-
-fn read_lines(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  match fs.read(path) {
-    Err(error) => Err("could not read " ++ path ++ ": " ++ fs_message(error))
-    Ok(text) => Ok(text.lines().reject(Str.is_empty))
-  }
-}
 
 fn numbers_after_label(line: Str) -> Result[List[Int], Str] {
   line.split(":").get(1).ok_or("expected `<label>: <numbers>`, got: " ++ line)?.words().try_map(Int.parse)
@@ -76,7 +58,7 @@ fn ways(race: Race) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let races = parse_races(read_lines(sys.fs, path)?)?
+  let races = parse_races(Fs.read_lines(sys.fs.read, path)?.reject(Str.is_empty))?
   let product = races.map(ways).fold(1, fn(total, count) { total * count })
   sys.console.print("product of ways to win: " ++ Int.to_str(product))
   Ok(())
