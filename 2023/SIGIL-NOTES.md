@@ -1,5 +1,12 @@
 # Sigil notes from porting Advent of Code 2023
 
+> **Findings only.** This file records what these 43 programs hit while being
+> written, and stays with them. Anything that wants somebody to *act* on it
+> lives in `~/dev/personal/sigil/BACKLOG.md` — one list, not one per
+> repository. The language items below are indexed there already, flagged as
+> needing re-verification against the current binary before any becomes a
+> ledger entry.
+
 Running log of performance and language findings, gathered while writing `partN.sg` for each day.
 Every claim here was measured or hit directly, not inferred.
 
