@@ -2,10 +2,10 @@
 
 > **Findings only.** This file records what these 43 programs hit while being
 > written, and stays with them. Anything that wants somebody to *act* on it
-> lives in `~/dev/personal/sigil/BACKLOG.md` — one list, not one per
-> repository. The language items below are indexed there already, flagged as
-> needing re-verification against the current binary before any becomes a
-> ledger entry.
+> lives at <https://github.com/gstark/sigil/issues> — one list, not one per
+> repository. The language items below still standing want an issue opened,
+> flagged `needs-recheck`, since each needs re-verification against the current
+> binary before it becomes a ledger entry.
 
 Running log of performance and language findings, gathered while writing `partN.sg` for each day.
 Every claim here was measured or hit directly, not inferred.
@@ -13,7 +13,8 @@ Every claim here was measured or hit directly, not inferred.
 Benchmark sources are `bench.sg` (maps, arithmetic, records, slicing), `bench2.sg` (lists) and
 `bench3.sg` (map-backed stdlib helpers), all run via `sigil exec bench.sg -- <n> <case>`.
 
-Suggested fixes, written up as draft decision entries, are in `~/dev/personal/sigil/PERF-PROPOSALS.md`.
+Suggested fixes, written up as draft decision entries, are issues at
+<https://github.com/gstark/sigil/issues> (the drafts lettered below kept their letters).
 
 > **Re-measured 2026-07-30, after the fixes.** Four things landed in `sigil` and every number below
 > is from a build that has all four: Draft A (`Map` on a persistent tree,
@@ -194,7 +195,7 @@ an unrelated reason turned a shrug into a finding, which is an argument for lowe
 nothing to do with why it was lowered.
 
 This is day 14's shape — a program that rebuilds a grid as strings — and it is the strongest
-evidence in this document for `STDLIB-PROPOSALS.md` Draft K. A `Str.join` over a list, or a builder,
+evidence in this document for stdlib Draft K, now an issue on gstark/sigil. A `Str.join` over a list, or a builder,
 would not have this curve.
 
 ### Practical guidance this suggests
@@ -221,7 +222,8 @@ problems above, and all three are gone.
 ## Language
 
 Things that cost me a compile cycle. None are bugs; a few might be worth a better diagnostic. Two
-have since been fixed and are marked; the rest stand.
+have since been fixed and are marked, and three more were closed as issues on
+gstark/sigil and are marked with the issue number; the rest stand.
 
 - **No `&&` / `||`.** It is `and` / `or` / `not`. `&&` failed as a lex error (E0101, "unexpected
   character `&`") rather than a "did you mean `and`". **Fixed:** E0101 on `&` now names `and` and
@@ -231,6 +233,7 @@ have since been fixed and are marked; the rest stand.
   `WORDS.find` and fails with E0402. `List.find(WORDS, ...)` works. Since the receiver's type is
   known, this could probably resolve the same way it does for any other value.
 - **No `Str.trim_end`** (only `Str.trim`). Worth having alongside `strip_suffix`.
+  **Fixed:** closed as gstark/sigil#17.
 - **A failed method call cascades.** One `no field trim_end` error produced two further E0201
   "cannot tell what `split` belongs to" errors for everything chained after it. Reporting only the
   first would be less noisy.
@@ -244,10 +247,11 @@ have since been fixed and are marked; the rest stand.
   `Int.rem_euclid` or similar in the standard library — grid wrapping is common enough, and the
   failure is silent rather than an error.
 - **`Int.parse` reads decimal only.** Day 18 part 2 hand-folds hex. A radix argument, or
-  `Int.parse_radix`, would have saved a function.
+  `Int.parse_radix`, would have saved a function. **Fixed:** closed as
+  gstark/sigil#18.
 - **Builtins are invisible to `sigil view`** (`Str.slice`, `Int.parse`, `List.get`, `Map.*`), so
   their signatures have to be discovered by provoking a type error. `sigil search ""` lists the
-  names but not the shapes.
+  names but not the shapes. **Fixed:** closed as gstark/sigil#22.
 - **Forward references within a file work**, including mutual recursion — day 19 part 2 has `through`
   calling `accepted`, which is defined below it, and it resolves fine. Worth knowing because E0402's
   wording ("not defined earlier in this file") suggested definitions must be ordered, which they need
@@ -419,7 +423,7 @@ be is not what the row looked like.
   Differences under ~15% here are still noise.
 - Ruby was run without YJIT. Enabling it would widen most gaps.
 - Days 17 and 21 needed the `pqueue` gem installed into the mise Ruby 3.3.0 to run at all; that gem
-  requirement is itself an argument for `STDLIB-PROPOSALS.md` Draft J, since the Sigil version had to
+  requirement is itself an argument for stdlib Draft J (an issue on gstark/sigil), since the Sigil version had to
   hand-roll the priority queue that Ruby installed from a package.
 - Days 22-25 have no Sigil implementation yet; days 21p2, 24p2 and 25p2 have no Ruby one.
 - The Ruby column re-measured within a few percent of the original table everywhere except day 10
@@ -472,6 +476,8 @@ day 16 grew ~50 lines per file to buy its 1.86x.
 
 ### The warning: the `sigil` on PATH is not the build the re-measurements above describe
 
+**Resolved 2026-08-04 — see the re-measurement below. Kept for the record.**
+
 Every "fixed" claim in this document was re-measured on a dev build. The installed `sigil 0.1.0`
 that actually runs these programs still has the old behaviour — measured directly this session:
 
@@ -483,6 +489,24 @@ that actually runs these programs still has the old behaviour — measured direc
   documents them; the binary does not have them.
 
 So: either install the fixed build on PATH, or read this document's "now" rows as "not yet, here".
+
+### Re-measured 2026-08-04: the fixed build is on PATH, and the warning above is closed
+
+`/Users/gstark/.cargo/bin/sigil`, `sigil 0.1.0`, binary mtime 2026-08-04 16:03 — minutes after
+`f7a8045` in the language repo, so this is a current build, not the July one. Every item of the
+warning was probed directly with `sigil exec`, foreground, same machine:
+
+- `Map.insert` fold is linear now: 16000 → **0.03s**, 48000 → **0.05s**, 200000 → **0.20s**.
+  Against 1.66s and 16.2s. The "now" rows in this document can be read as written.
+- `List.uniq` on 80k records with 40k distinct: **0.11s**, against 14.8s.
+- `Set`, `Int.rem_euclid`, `Int.parse_radix` all resolve and return the right answers
+  (`Set.empty`/`insert`/`len`/`has`; `Int.rem_euclid(-7, 3) = 2`; `Int.parse_radix("ff", 16) = 255`).
+  No E0402.
+
+What this does *not* settle: the bucketed-map workarounds in days 16, 17 and 21 were left in place
+and have not been re-timed against this binary. The primitive they were working around is fixed, so
+de-bucketing is worth retrying — but the 1.0s → 24s and 0.17s → 2.17s numbers above were measured on
+the old build and say nothing about this one. Measure before you delete anything.
 
 ### New language findings from the pass (installed 0.1.0)
 
