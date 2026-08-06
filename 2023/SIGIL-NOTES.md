@@ -520,3 +520,28 @@ the old build and say nothing about this one. Measure before you delete anything
   E0112 — long map signatures get written out in full.
 - **`sigil exec` sandboxes fs reads to the script's directory** — a temp copy of a program must
   bring its input along.
+
+## 2026-08-06: day 17 moves onto the library's `Heap`, and the bucket queue confesses
+
+Issue #26 shipped `Heap` (a persistent leftist heap, sigil db48dc3), with day
+17 as the program whose design its absence had bent. Both parts now run
+Dijkstra on `Heap[Step]` ordered by cost; the hand-rolled bucket queue is
+gone.
+
+The adoption exposed a real latent bug, the same way 03-cache's D-130
+adoption did: **the bucket queue was wrong on zero-weight edges.** A
+zero-cost relaxation lands its state back in the bucket being expanded —
+which `run` had already removed from the frontier and would never visit
+again — so those states silently never expanded. Real AoC inputs are digits
+1–9 and can never trigger it, but the hand-made `sample2.txt` regression
+grid contains zeros, and its blessed answers (71 / 83) turn out to be the
+bug's own output. An independent Dijkstra confirms the heap version's 27 /
+36; `expected/` is corrected. A blessed file is only as honest as the
+program that blessed it.
+
+The price, measured (real input, same machine): part 1 **0.71s → 1.40s**,
+part 2 **1.65s → 2.95s**. A persistent heap allocates per push where the
+bucket map indexed by small-integer cost; on this input class the bucket
+queue really was ~2× faster — and also subtly wrong. The general structure
+wins on being right everywhere, and the rows above that cite day 17's
+timings now describe retired code.

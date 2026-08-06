@@ -18,15 +18,14 @@
 /// about forty thousand — instead of tracking a run length per state, and the
 /// no-reversing rule enforces itself, since a perpendicular turn cannot reverse.
 ///
-/// Dijkstra by buckets rather than a heap: all costs are small integers, so the
-/// frontier is a `Map` from distance to the states waiting at it, worked through
-/// in increasing order. Each bucket is dropped once processed, which matters a
-/// great deal here — see `SIGIL-NOTES.md`, but briefly, `Map.insert` costs time
-/// proportional to the map's size, so the frontier is kept narrow on purpose. The
-/// distance table used to be bucketed by row for the same reason — keying one
-/// flat map by the state, as a record or as a packed integer, measured 13x
-/// slower. It is a `List` now, written through `List.put`, so a state's position
-/// reaches its cell directly and the bucketing is gone.
+/// Dijkstra on the library's `Heap` (issue #26 closed what this program was the
+/// evidence for). The first version had no heap to reach for and hand-rolled a
+/// bucket queue — a `Map` from distance to the states waiting at it, correct
+/// only because every edge weight is a small integer. The frontier is now a
+/// `Heap[Step]` ordered by cost, which is the general structure; the distance
+/// table stays a `List` written through `List.put`, so a state's position
+/// reaches its cell directly (keying a flat `Map` by the state measured 13x
+/// slower before that change).
 ///
 /// Advent of Code 2023, day 17, part 2. A Sigil implementation —
 /// https://github.com/gstark/sigil — run with `sigil exec part2.sg -- input.txt`.
@@ -44,9 +43,15 @@ type State = { axis: Int, c: Int, r: Int }
 
 type Step = { cost: Int, state: State }
 
-/// The frontier, as distance to the states waiting there, alongside the best
-/// distance known for each state.
-type Search = { best: List[List[Option[Int]]], frontier: Map[Int, List[State]] }
+/// The frontier as a min-heap of costed states, alongside the best distance
+/// known for each state.
+type Search = { best: List[List[Option[Int]]], frontier: Heap[Step] }
+
+/// The order the frontier pops in: cheapest first, as `Heap.push` is told at
+/// every call (D-019 — the comparison is a choice, so it travels).
+fn by_cost(a: Step, b: Step) -> Int {
+  Int.compare(a.cost, b.cost)
+}
 
 /// How few and how many blocks one run may cross.
 const SHORTEST: Int = 4
@@ -126,41 +131,29 @@ fn offer(search: Search, step: Step, at: Int) -> Search {
   if best_of(search.best, step.state).map(fn(seen) { seen <= reached }).unwrap_or(false) {
     search
   } else {
-    let waiting = Map.get(search.frontier, reached).unwrap_or([])
     {
       best: set_best(search.best, step.state, reached),
-      frontier: Map.insert(search.frontier, reached, waiting.push(step.state)),
+      frontier: search.frontier.push({ cost: reached, state: step.state }, by_cost),
     }
   }
 }
 
 /// A state can be queued more than once and only the first pop is authoritative;
-/// the rest are stale and skipped by comparing against the recorded best.
-fn expand(grid: Grid, search: Search, waiting: List[State], at: Int) -> Search {
-  waiting.fold(search, fn(carried, state) {
-    if best_of(carried.best, state).unwrap_or(0 - 1) != at {
-      carried
-    } else {
-      moves(grid, state).fold(carried, fn(inner, step) { offer(inner, step, at) })
-    }
-  })
-}
-
-/// Distances are worked through in increasing order, so the first time the
-/// bottom-right block turns up in a bucket, that bucket's distance is its answer.
-fn run(grid: Grid, search: Search, at: Int, limit: Int) -> Result[Int, Str] {
-  if at > limit {
-    Err("no route to the factory")
-  } else {
-    match Map.get(search.frontier, at) {
-      None => run(grid, search, at + 1, limit)
-      Some(waiting) => {
-        if waiting.any(fn(state) { state.r == grid.height - 1 and state.c == grid.width - 1 }) {
-          Ok(at)
-        } else {
-          let stepped = expand(grid, { best: search.best, frontier: Map.remove(search.frontier, at) }, waiting, at)
-          run(grid, stepped, at + 1, limit)
-        }
+/// the rest are stale and skipped by comparing against the recorded best. The
+/// heap pops costs in increasing order, so the first time the bottom-right
+/// block comes up, its cost is the answer.
+fn run(grid: Grid, search: Search) -> Result[Int, Str] {
+  match Heap.pop(search.frontier, by_cost) {
+    None => Err("no route to the factory")
+    Some(popped) => {
+      let step = popped.top
+      let rest = { best: search.best, frontier: popped.rest }
+      if best_of(search.best, step.state).unwrap_or(0 - 1) != step.cost {
+        run(grid, rest)
+      } else if step.state.r == grid.height - 1 and step.state.c == grid.width - 1 {
+        Ok(step.cost)
+      } else {
+        run(grid, moves(grid, step.state).fold(rest, fn(inner, move) { offer(inner, move, step.cost) }))
       }
     }
   }
@@ -170,9 +163,9 @@ fn least_heat(grid: Grid) -> Result[Int, Str] {
   let starts = [{ axis: 0, c: 0, r: 0 }, { axis: 1, c: 0, r: 0 }]
   let search = {
     best: starts.fold(blank(grid), fn(best, state) { set_best(best, state, 0) }),
-    frontier: Map.insert(Map.empty(), 0, starts),
+    frontier: starts.fold(Heap.empty(), fn(heap, state) { heap.push({ cost: 0, state: state }, by_cost) }),
   }
-  run(grid, search, 0, grid.height * grid.width * 9)
+  run(grid, search)
 }
 
 fn main(sys: Sys) -> Result[Unit, Str] {
