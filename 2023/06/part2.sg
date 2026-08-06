@@ -19,13 +19,13 @@ type Race = { record: Int, time: Int }
 /// Closing up the gaps is the whole of part 2's rule change: the digits after the
 /// label, joined, are the number.
 fn number_after_label(line: Str) -> Result[Int, Str] {
-  Int.parse(line.split(":").get(1).ok_or("expected `<label>: <numbers>`, got: " ++ line)?.words().join(""))
+  Int.parse((try line.split(":").get(1).ok_or("expected `<label>: <numbers>`, got: " ++ line)).words().join(""))
 }
 
 fn parse_race(lines: List[Str]) -> Result[Race, Str] {
   Ok({
-    record: number_after_label(lines.get(1).ok_or("expected a `Distance:` line")?)?,
-    time: number_after_label(lines.get(0).ok_or("expected a `Time:` line")?)?,
+    record: try number_after_label(try lines.get(1).ok_or("expected a `Distance:` line")),
+    time: try number_after_label(try lines.get(0).ok_or("expected a `Time:` line")),
   })
 }
 
@@ -57,7 +57,7 @@ fn ways(race: Race) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let race = parse_race(Fs.read_lines(sys.fs.read, path)?.reject(Str.is_empty))?
+  let race = try parse_race((try Fs.read_lines(sys.fs.read, path)).reject(Str.is_empty))
   sys.console.print("ways to win the long race: " ++ Int.to_str(ways(race)))
   Ok(())
 }

@@ -19,32 +19,32 @@ fn parse_rule(text: Str) -> Result[Rule, Str] {
     Ok({ dest: text, field: "", above: false, value: 0 })
   } else {
     let bad = "expected `<test>:<dest>`, got: " ++ text
-    let test = halves.get(0).ok_or(bad)?
+    let test = try halves.get(0).ok_or(bad)
     let above = test.contains(">")
     let sides = test.split(if above { ">" } else { "<" })
     let malformed = "expected `<field><op><value>`, got: " ++ test
     Ok({
-      dest: halves.get(1).ok_or(bad)?,
-      field: sides.get(0).ok_or(malformed)?,
+      dest: try halves.get(1).ok_or(bad),
+      field: try sides.get(0).ok_or(malformed),
       above:,
-      value: Int.parse(sides.get(1).ok_or(malformed)?)?,
+      value: try Int.parse(try sides.get(1).ok_or(malformed)),
     })
   }
 }
 
 fn parse_workflow(line: Str) -> Result[{ name: Str, rules: List[Rule] }, Str] {
   let bad = "expected `<name>{<rules>}`, got: " ++ line
-  let halves = line.strip_suffix("}").ok_or(bad)?.split("{")
+  let halves = (try line.strip_suffix("}").ok_or(bad)).split("{")
   Ok({
-    name: halves.get(0).ok_or(bad)?,
-    rules: halves.get(1).ok_or(bad)?.split(",").try_map(parse_rule)?,
+    name: try halves.get(0).ok_or(bad),
+    rules: try (try halves.get(1).ok_or(bad)).split(",").try_map(parse_rule),
   })
 }
 
 fn parse_rating(text: Str) -> Result[{ key: Str, value: Int }, Str] {
   let halves = text.split("=")
   let bad = "expected `<field>=<value>`, got: " ++ text
-  Ok({ key: halves.get(0).ok_or(bad)?, value: Int.parse(halves.get(1).ok_or(bad)?)? })
+  Ok({ key: try halves.get(0).ok_or(bad), value: try Int.parse(try halves.get(1).ok_or(bad)) })
 }
 
 /// A part is its four ratings keyed by field name. A record would need the four
@@ -52,8 +52,8 @@ fn parse_rating(text: Str) -> Result[{ key: Str, value: Int }, Str] {
 /// indexed by a string; a map is indexed by exactly the letter the input names.
 fn parse_part(line: Str) -> Result[Map[Str, Int], Str] {
   let bad = "expected `{<field>=<value>,...}`, got: " ++ line
-  let body = line.strip_prefix("{").ok_or(bad)?.strip_suffix("}").ok_or(bad)?
-  Ok(Map.from_list(body.split(",").try_map(parse_rating)?))
+  let body = try (try line.strip_prefix("{").ok_or(bad)).strip_suffix("}").ok_or(bad)
+  Ok(Map.from_list(try body.split(",").try_map(parse_rating)))
 }
 
 fn matches(rule: Rule, part: Map[Str, Int]) -> Bool {
@@ -74,22 +74,22 @@ fn sort_part(workflows: Map[Str, List[Rule]], name: Str, part: Map[Str, Int]) ->
   } else if name == "R" {
     Ok(false)
   } else {
-    let rules = Map.get(workflows, name).ok_or("no such workflow: " ++ name)?
-    let { dest: } = List.find(rules, fn(rule) { matches(rule, part) }).ok_or("no rule matched in: " ++ name)?
+    let rules = try Map.get(workflows, name).ok_or("no such workflow: " ++ name)
+    let { dest: } = try List.find(rules, fn(rule) { matches(rule, part) }).ok_or("no rule matched in: " ++ name)
     sort_part(workflows, dest, part)
   }
 }
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let blocks = Fs.read_text(sys.fs.read, path)?.trim().split("\n\n")
-  let lines = blocks.get(0).ok_or("no workflows")?.split("\n").reject(fn(line) { line.trim() == "" })
-  let parsed = lines.try_map(parse_workflow)?
+  let blocks = (try Fs.read_text(sys.fs.read, path)).trim().split("\n\n")
+  let lines = (try blocks.get(0).ok_or("no workflows")).split("\n").reject(fn(line) { line.trim() == "" })
+  let parsed = try lines.try_map(parse_workflow)
   let workflows = parsed.fold(Map.empty(), fn(found, entry) { Map.insert(found, entry.name, entry.rules) })
-  let parts = blocks.get(1).ok_or("no parts")?.split("\n").reject(fn(line) { line.trim() == "" }).try_map(parse_part)?
-  let accepted = parts.try_map(fn(part) {
+  let parts = try (try blocks.get(1).ok_or("no parts")).split("\n").reject(fn(line) { line.trim() == "" }).try_map(parse_part)
+  let accepted = try parts.try_map(fn(part) {
     sort_part(workflows, "in", part).map(fn(taken) { if taken { Map.values(part).sum() } else { 0 } })
-  })?
+  })
   sys.console.print("parts: " ++ Int.to_str(parts.len()) ++ ", workflows: " ++ Int.to_str(parsed.len()))
   sys.console.print("sum of accepted ratings: " ++ Int.to_str(accepted.sum()))
   Ok(())

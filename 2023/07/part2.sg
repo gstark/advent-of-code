@@ -55,9 +55,9 @@ fn sort_key(cards: Str) -> Str {
 fn parse_hand(line: Str) -> Result[Hand, Str] {
   let parts = line.words()
   let malformed = "expected `<cards> <bid>`, got: " ++ line
-  let cards = parts.get(0).ok_or(malformed)?
-  let bid = parts.get(1).ok_or(malformed)?
-  Ok({ bid: Int.parse(bid)?, key: sort_key(cards) })
+  let cards = try parts.get(0).ok_or(malformed)
+  let bid = try parts.get(1).ok_or(malformed)
+  Ok({ bid: try Int.parse(bid), key: sort_key(cards) })
 }
 
 fn winnings(hands: List[Hand]) -> Int {
@@ -69,7 +69,7 @@ fn winnings(hands: List[Hand]) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let hands = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" }).try_map(parse_hand)?
+  let hands = try (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" }).try_map(parse_hand)
   sys.console.print("total winnings: " ++ Int.to_str(winnings(hands)))
   Ok(())
 }

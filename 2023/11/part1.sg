@@ -61,7 +61,7 @@ fn total_distance(found: List[Galaxy], grid: List[Str], factor: Int) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let grid = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" })
+  let grid = (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" })
   let found = galaxies(grid)
   sys.console.print("galaxies: " ++ Int.to_str(found.len()))
   sys.console.print("sum of distances: " ++ Int.to_str(total_distance(found, grid, 2)))

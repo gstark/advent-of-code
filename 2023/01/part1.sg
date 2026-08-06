@@ -24,14 +24,14 @@ fn digits(line: Str) -> List[Int] {
 /// promises one, so a line without one means the input was misread.
 fn calibration(line: Str) -> Result[Int, Str] {
   let found = digits(line)
-  let first = found.first().ok_or("no digit on line: " ++ line)?
-  let last = found.last().ok_or("no digit on line: " ++ line)?
+  let first = try found.first().ok_or("no digit on line: " ++ line)
+  let last = try found.last().ok_or("no digit on line: " ++ line)
   Ok(first * 10 + last)
 }
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let total = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" }).try_map(calibration)?.sum()
+  let total = (try (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" }).try_map(calibration)).sum()
   sys.console.print("sum of calibration values: " ++ Int.to_str(total))
   Ok(())
 }

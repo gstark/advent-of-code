@@ -32,7 +32,7 @@ fn parse_numbers(text: Str) -> Result[List[Int], Str] {
 }
 
 fn parse_rule(line: Str) -> Result[Rule, Str] {
-  let parts = parse_numbers(line)?
+  let parts = try parse_numbers(line)
   if parts.len() != 3 {
     Err("expected `<dst> <src> <len>`, got: " ++ line)
   } else {
@@ -50,9 +50,9 @@ fn parse_layer(block: Str) -> Result[List[Rule], Str] {
 
 fn parse_almanac(text: Str) -> Result[Almanac, Str] {
   let blocks = text.split("\n\n")
-  let head = blocks.get(0).ok_or("empty almanac")?
-  let seeds = head.split(":").get(1).ok_or("expected a `seeds:` line, got: " ++ head)?
-  Ok({ layers: blocks.drop(1).try_map(parse_layer)?, seeds: parse_numbers(seeds)? })
+  let head = try blocks.get(0).ok_or("empty almanac")
+  let seeds = try head.split(":").get(1).ok_or("expected a `seeds:` line, got: " ++ head)
+  Ok({ layers: try blocks.drop(1).try_map(parse_layer), seeds: try parse_numbers(seeds) })
 }
 
 /// The seed line read the way part 2 reads it: start and length, in pairs.
@@ -94,9 +94,9 @@ fn map_layer(spans: List[Interval], rules: List[Rule]) -> List[Interval] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let { layers:, seeds: } = parse_almanac(Fs.read_text(sys.fs.read, path)?.trim())?
+  let { layers:, seeds: } = try parse_almanac((try Fs.read_text(sys.fs.read, path)).trim())
   let located = layers.fold(seed_intervals(seeds), map_layer)
   let lowest = located.map(fn(span) { span.lo }).min()
-  sys.console.print("lowest location: " ++ Int.to_str(lowest.ok_or("no seeds")?))
+  sys.console.print("lowest location: " ++ Int.to_str(try lowest.ok_or("no seeds")))
   Ok(())
 }

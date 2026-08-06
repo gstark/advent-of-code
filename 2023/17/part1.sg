@@ -47,7 +47,7 @@ const LONGEST: Int = 3
 /// Digits are parsed once into a table. Re-slicing and re-parsing the text on
 /// every block read is the kind of cost that hides well and dominates completely.
 fn Grid.of(rows: List[Str]) -> Result[Grid, Str] {
-  let cells = rows.try_map(fn(row) { row.chars().try_map(Int.parse) })?
+  let cells = try rows.try_map(fn(row) { row.chars().try_map(Int.parse) })
   Ok({ cells:, height: rows.len(), width: rows.first().unwrap_or("").len() })
 }
 
@@ -169,7 +169,7 @@ fn least_heat(grid: Grid) -> Result[Int, Str] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let grid = Grid.of(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" }))?
-  sys.console.print("least heat loss: " ++ Int.to_str(least_heat(grid)?))
+  let grid = try Grid.of((try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" }))
+  sys.console.print("least heat loss: " ++ Int.to_str(try least_heat(grid)))
   Ok(())
 }

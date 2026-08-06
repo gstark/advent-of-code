@@ -97,7 +97,7 @@ fn ratio(cells: Map[Int, Int], found: List[Num], at: Int) -> Option[Int] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let lines = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" })
+  let lines = (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" })
   let found = numbers(lines)
   let cells = number_cells(found)
   let total = stars(lines).map(fn(at) { ratio(cells, found, at) }).compact().sum()

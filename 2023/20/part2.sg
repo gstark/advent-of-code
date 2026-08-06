@@ -46,8 +46,8 @@ type Counted = { found: Map[Str, Int], machine: Machine }
 fn parse_module(line: Str) -> Result[{ key: Str, value: Module }, Str] {
   let complaint = "expected `<name> -> <dests>`, got: " ++ line
   let halves = line.split("->")
-  let left = halves.get(0).ok_or(complaint)?.trim()
-  let dests = halves.get(1).ok_or(complaint)?.split(",").map(fn(dest) { dest.trim() }).reject(fn(dest) { dest == "" })
+  let left = (try halves.get(0).ok_or(complaint)).trim()
+  let dests = (try halves.get(1).ok_or(complaint)).split(",").map(fn(dest) { dest.trim() }).reject(fn(dest) { dest == "" })
   let kind = left.slice(0, 1)
   match left.strip_prefix("%").or_else(fn() { left.strip_prefix("&") }) {
     Some(name) => Ok({ key: name, value: { dests:, kind: } })
@@ -56,7 +56,7 @@ fn parse_module(line: Str) -> Result[{ key: Str, value: Module }, Str] {
 }
 
 fn parse_machine(lines: List[Str]) -> Result[Map[Str, Module], Str] {
-  Ok(Map.from_list(lines.try_map(parse_module)?))
+  Ok(Map.from_list(try lines.try_map(parse_module)))
 }
 
 /// A conjunction starts out remembering a low pulse from every input, so its
@@ -169,15 +169,15 @@ fn until_found(modules: Map[Str, Module], feeder: Str, wanted: Int, at: Int, lim
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let modules = parse_machine(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }))?
+  let modules = try parse_machine((try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line.trim() == "" }))
   let feeders = feeding(modules, "rx")
-  Result.require(feeders.len() == 1,
-    "expected exactly one module feeding rx, found " ++ Int.to_str(feeders.len()))?
+  try Result.require(feeders.len() == 1,
+    "expected exactly one module feeding rx, found " ++ Int.to_str(feeders.len()))
   let feeder = feeders.first().unwrap_or("")
   let kind = Map.get(modules, feeder).map(fn(module) { module.kind }).unwrap_or("")
-  Result.require(kind == "&", "expected rx to be fed by a conjunction, found kind `" ++ kind ++ "`")?
+  try Result.require(kind == "&", "expected rx to be fed by a conjunction, found kind `" ++ kind ++ "`")
   let watched = feeding(modules, feeder)
-  let { found: } = until_found(modules, feeder, watched.len(), 1, 100000, { found: Map.empty(), machine: initial(modules) })?
+  let { found: } = try until_found(modules, feeder, watched.len(), 1, 100000, { found: Map.empty(), machine: initial(modules) })
   let periods = Map.values(found)
   sys.console.print("rx is fed by " ++ feeder ++ " via " ++ Int.to_str(watched.len()) ++ " inputs")
   sys.console.print("periods: " ++ periods.map(Int.to_str).join(" "))

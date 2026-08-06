@@ -40,8 +40,8 @@ fn dig(letter: Str, distance: Int) -> Result[Dig, Str] {
 /// second half turns out to hinge on.
 fn parse_dig(line: Str) -> Result[Dig, Str] {
   let parts = line.words()
-  let letter = parts.get(0).ok_or("expected `<dir> <count> (<colour>)`, got: " ++ line)?
-  dig(letter, Int.parse(parts.get(1).ok_or("expected a distance, got: " ++ line)?)?)
+  let letter = try parts.get(0).ok_or("expected `<dir> <count> (<colour>)`, got: " ++ line)
+  dig(letter, try Int.parse(try parts.get(1).ok_or("expected a distance, got: " ++ line)))
 }
 
 fn lagoon(plan: List[Dig]) -> Int {
@@ -55,7 +55,7 @@ fn lagoon(plan: List[Dig]) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let plan = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }).try_map(parse_dig)?
+  let plan = try (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line.trim() == "" }).try_map(parse_dig)
   sys.console.print("cubic metres of lava: " ++ Int.to_str(lagoon(plan)))
   Ok(())
 }

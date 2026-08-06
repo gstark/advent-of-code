@@ -17,7 +17,7 @@ fn b_map(n: Int) -> Int { List.range(0, n).map(fn(i) { i + 1 }).len() }
 fn b_strcat(n: Int) -> Int { List.range(0, n).fold("", fn(s, i) { s ++ "x" }).len() }
 
 fn main(sys: Sys) -> Result[Unit, Str] {
-  let n = Int.parse(sys.args.first().unwrap_or("10000"))?
+  let n = try Int.parse(sys.args.first().unwrap_or("10000"))
   let w = sys.args.get(1).unwrap_or("push")
   let out = if w == "push" { b_push(n) }
     else if w == "concat" { b_concat(n) }

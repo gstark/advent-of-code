@@ -51,14 +51,14 @@ fn parse_hex(digits: Str) -> Result[Int, Str] {
 /// The colour, stripped of its `(#` and `)`: five digits of distance, then one
 /// naming the direction.
 fn parse_dig(line: Str) -> Result[Dig, Str] {
-  let colour = line.words().get(2).ok_or("expected `<dir> <count> (<colour>)`, got: " ++ line)?
-  let code = colour.strip_prefix("(#").and_then(fn(rest) { rest.strip_suffix(")") })
-    .ok_or("expected `(#......)`, got: " ++ colour)?
+  let colour = try line.words().get(2).ok_or("expected `<dir> <count> (<colour>)`, got: " ++ line)
+  let code = try colour.strip_prefix("(#").and_then(fn(rest) { rest.strip_suffix(")") })
+    .ok_or("expected `(#......)`, got: " ++ colour)
   if code.len() != 6 {
     Err("expected six hex digits, got: " ++ colour)
   } else {
-    let letter = ["R", "D", "L", "U"].get(parse_hex(code.slice(5, 6))?).ok_or("unknown direction in: " ++ colour)?
-    dig(letter, parse_hex(code.slice(0, 5))?)
+    let letter = try ["R", "D", "L", "U"].get(try parse_hex(code.slice(5, 6))).ok_or("unknown direction in: " ++ colour)
+    dig(letter, try parse_hex(code.slice(0, 5)))
   }
 }
 
@@ -73,7 +73,7 @@ fn lagoon(plan: List[Dig]) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let plan = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }).try_map(parse_dig)?
+  let plan = try (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line.trim() == "" }).try_map(parse_dig)
   sys.console.print("cubic metres of lava: " ++ Int.to_str(lagoon(plan)))
   Ok(())
 }

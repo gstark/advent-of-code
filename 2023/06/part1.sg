@@ -19,12 +19,12 @@ type Sys = { console: Console, fs: Fs, args: List[Str] }
 type Race = { record: Int, time: Int }
 
 fn numbers_after_label(line: Str) -> Result[List[Int], Str] {
-  line.split(":").get(1).ok_or("expected `<label>: <numbers>`, got: " ++ line)?.words().try_map(Int.parse)
+  (try line.split(":").get(1).ok_or("expected `<label>: <numbers>`, got: " ++ line)).words().try_map(Int.parse)
 }
 
 fn parse_races(lines: List[Str]) -> Result[List[Race], Str] {
-  let times = numbers_after_label(lines.get(0).ok_or("expected a `Time:` line")?)?
-  let records = numbers_after_label(lines.get(1).ok_or("expected a `Distance:` line")?)?
+  let times = try numbers_after_label(try lines.get(0).ok_or("expected a `Time:` line"))
+  let records = try numbers_after_label(try lines.get(1).ok_or("expected a `Distance:` line"))
   Ok(times.zip(records).map(fn(pair) { { record: pair.second, time: pair.first } }))
 }
 
@@ -58,7 +58,7 @@ fn ways(race: Race) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let races = parse_races(Fs.read_lines(sys.fs.read, path)?.reject(Str.is_empty))?
+  let races = try parse_races((try Fs.read_lines(sys.fs.read, path)).reject(Str.is_empty))
   let product = races.map(ways).fold(1, fn(total, count) { total * count })
   sys.console.print("product of ways to win: " ++ Int.to_str(product))
   Ok(())

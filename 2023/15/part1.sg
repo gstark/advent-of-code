@@ -13,7 +13,7 @@ type Sys = { console: Console, fs: Fs, args: List[Str] }
 /// The sequence is one long line, but the file ends with a newline and may have
 /// been wrapped, so every line break is dropped before splitting on commas.
 fn read_steps(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  let text = Fs.read_text(fs.read, path)?
+  let text = try Fs.read_text(fs.read, path)
   Ok(text.replace("\n", "").trim().split(",").reject(fn(step) { step == "" }))
 }
 
@@ -25,7 +25,7 @@ fn hash(text: Str) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let steps = read_steps(sys.fs, path)?
+  let steps = try read_steps(sys.fs, path)
   sys.console.print("steps: " ++ Int.to_str(steps.len()))
   sys.console.print("sum of hashes: " ++ Int.to_str(steps.map(hash).sum()))
   Ok(())

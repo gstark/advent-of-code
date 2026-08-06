@@ -29,18 +29,18 @@ fn parse_node(line: Str) -> Result[{ key: Str, value: Node }, Str] {
   let words = line.replace("=", " ").replace("(", " ").replace(")", " ").replace(",", " ").words()
   let malformed = "expected `<name> = (<left>, <right>)`, got: " ++ line
   Ok({
-    key: words.get(0).ok_or(malformed)?,
+    key: try words.get(0).ok_or(malformed),
     value: {
-      left: words.get(1).ok_or(malformed)?,
-      right: words.get(2).ok_or(malformed)?,
+      left: try words.get(1).ok_or(malformed),
+      right: try words.get(2).ok_or(malformed),
     },
   })
 }
 
 fn parse_network(lines: List[Str]) -> Result[Network, Str] {
-  let turns = lines.first().ok_or("expected a line of turns")?
+  let turns = try lines.first().ok_or("expected a line of turns")
   Ok({
-    nodes: Map.from_list(lines.drop(1).try_map(parse_node)?),
+    nodes: Map.from_list(try lines.drop(1).try_map(parse_node)),
     turns: turns.trim(),
   })
 }
@@ -51,7 +51,7 @@ fn turn_at(turns: Str, step: Int) -> Str {
 }
 
 fn hop(network: Network, from: Str, step: Int) -> Result[Str, Str] {
-  let { left:, right: } = Map.get(network.nodes, from).ok_or("no such node: " ++ from)?
+  let { left:, right: } = try Map.get(network.nodes, from).ok_or("no such node: " ++ from)
   Ok(if turn_at(network.turns, step) == "L" { left } else { right })
 }
 
@@ -59,7 +59,7 @@ fn walk(network: Network, at: Str, step: Int) -> Result[Int, Str] {
   if at.ends_with("Z") {
     Ok(step)
   } else {
-    walk(network, hop(network, at, step)?, step + 1)
+    walk(network, try hop(network, at, step), step + 1)
   }
 }
 
@@ -79,9 +79,9 @@ fn lcm(a: Int, b: Int) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let network = parse_network(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }))?
+  let network = try parse_network((try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line.trim() == "" }))
   let starts = Map.keys(network.nodes).filter(fn(name) { name.ends_with("A") })
-  let cycles = starts.try_map(fn(start) { walk(network, start, 0) })?
+  let cycles = try starts.try_map(fn(start) { walk(network, start, 0) })
   sys.console.print("ghosts on " ++ Int.to_str(starts.len()) ++ " paths, cycles: " ++ cycles.map(Int.to_str).join(" "))
   sys.console.print("steps until all on Z: " ++ Int.to_str(cycles.fold(1, lcm)))
   Ok(())

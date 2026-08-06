@@ -100,10 +100,10 @@ fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
   let steps = match sys.args.get(1) {
     None => 64
-    Some(raw) => Int.parse(raw)?
+    Some(raw) => try Int.parse(raw)
   }
-  let grid = Grid.of(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" }))
+  let grid = Grid.of((try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" }))
   sys.console.print("plots reachable in exactly " ++ Int.to_str(steps) ++ " steps: "
-    ++ Int.to_str(reachable(grid, start_of(grid)?, steps)))
+    ++ Int.to_str(reachable(grid, try start_of(grid), steps)))
   Ok(())
 }

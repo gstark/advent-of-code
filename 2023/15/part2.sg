@@ -24,7 +24,7 @@ type Sys = { console: Console, fs: Fs, args: List[Str] }
 type Lens = { focal: Int, label: Str }
 
 fn read_steps(fs: Fs, path: Str) -> Result[List[Str], Str] {
-  let text = Fs.read_text(fs.read, path)?
+  let text = try Fs.read_text(fs.read, path)
   Ok(text.replace("\n", "").trim().split(",").reject(fn(step) { step == "" }))
 }
 
@@ -51,8 +51,8 @@ fn apply(boxes: Map[Int, List[Lens]], step: Str) -> Result[Map[Int, List[Lens]],
     }))
     None => {
       let halves = step.split("=")
-      let label = halves.get(0).ok_or("expected `<label>=<focal>` or `<label>-`, got: " ++ step)?
-      let focal = Int.parse(halves.get(1).ok_or("expected a focal length, got: " ++ step)?)?
+      let label = try halves.get(0).ok_or("expected `<label>=<focal>` or `<label>-`, got: " ++ step)
+      let focal = try Int.parse(try halves.get(1).ok_or("expected a focal length, got: " ++ step))
       Ok(Map.update(boxes, hash(label), fn(box) {
         install(box.unwrap_or([]), { focal:, label: })
       }))
@@ -71,8 +71,8 @@ fn focusing_power(boxes: Map[Int, List[Lens]]) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let steps = read_steps(sys.fs, path)?
-  let boxes = steps.fold(Ok(Map.empty()), fn(carried, step) { apply(carried?, step) })?
+  let steps = try read_steps(sys.fs, path)
+  let boxes = try steps.fold(Ok(Map.empty()), fn(carried, step) { apply(try carried, step) })
   sys.console.print("focusing power: " ++ Int.to_str(focusing_power(boxes)))
   Ok(())
 }

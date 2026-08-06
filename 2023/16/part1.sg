@@ -196,7 +196,7 @@ fn energised(grid: Grid, start: Beam) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let grid = Grid.of(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" }))
+  let grid = Grid.of((try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" }))
   sys.console.print("energised tiles: " ++ Int.to_str(energised(grid, { c: 0, d: 1, r: 0 })))
   Ok(())
 }

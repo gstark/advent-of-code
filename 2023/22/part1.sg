@@ -35,7 +35,7 @@ type Column = { top: Int, brick: Int }
 type Stack = { supports: List[List[Int]], columns: Map[Cell, Column] }
 
 fn parse_end(text: Str) -> Result[List[Int], Str] {
-  let parts = text.trim().split(",").try_map(Int.parse)?
+  let parts = try text.trim().split(",").try_map(Int.parse)
   if parts.len() != 3 {
     Err("expected `x,y,z`, got: " ++ text)
   } else {
@@ -46,8 +46,8 @@ fn parse_end(text: Str) -> Result[List[Int], Str] {
 fn parse_brick(line: Str) -> Result[Brick, Str] {
   let ends = line.split("~")
   let malformed = "expected `<end>~<end>`, got: " ++ line
-  let a = parse_end(ends.get(0).ok_or(malformed)?)?
-  let b = parse_end(ends.get(1).ok_or(malformed)?)?
+  let a = try parse_end(try ends.get(0).ok_or(malformed))
+  let b = try parse_end(try ends.get(1).ok_or(malformed))
   let axes = a.zip(b)
   let hi = axes.map(fn(axis) { Int.max(axis.first, axis.second) })
   let lo = axes.map(fn(axis) { Int.min(axis.first, axis.second) })
@@ -100,7 +100,7 @@ fn load_bearing(supports: List[List[Int]]) -> List[Int] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let bricks = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }).try_map(parse_brick)?
+  let bricks = try (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line.trim() == "" }).try_map(parse_brick)
   let condemned = load_bearing(settle_all(bricks).supports)
   sys.console.print("bricks: " ++ Int.to_str(bricks.len()) ++ ", load-bearing: " ++ Int.to_str(condemned.len()))
   sys.console.print("safe to disintegrate: " ++ Int.to_str(bricks.len() - condemned.len()))

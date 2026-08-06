@@ -23,8 +23,8 @@ fn parse_numbers(text: Str) -> Result[List[Int], Str] {
 fn matches(line: Str) -> Result[Int, Str] {
   let fields = line.replace(":", "|").split("|")
   let malformed = "expected `Card <id>: <winning> | <held>`, got: " ++ line
-  let winning = parse_numbers(fields.get(1).ok_or(malformed)?)?
-  let held = parse_numbers(fields.get(2).ok_or(malformed)?)?
+  let winning = try parse_numbers(try fields.get(1).ok_or(malformed))
+  let held = try parse_numbers(try fields.get(2).ok_or(malformed))
   Ok(held.count(fn(number) { winning.contains(number) }))
 }
 
@@ -38,7 +38,7 @@ fn score(found: Int) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let total = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" }).try_map(matches)?.map(score).sum()
+  let total = (try (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" }).try_map(matches)).map(score).sum()
   sys.console.print("total points: " ++ Int.to_str(total))
   Ok(())
 }

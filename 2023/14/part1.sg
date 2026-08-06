@@ -51,7 +51,7 @@ fn load(rows: List[Str]) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let grid = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" })
+  let grid = (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" })
   sys.console.print("load on the north beams: " ++ Int.to_str(load(roll_north(grid))))
   Ok(())
 }

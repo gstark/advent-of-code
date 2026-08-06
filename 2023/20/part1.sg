@@ -33,8 +33,8 @@ type Counted = { high: Int, low: Int, machine: Machine }
 fn parse_module(line: Str) -> Result[{ key: Str, value: Module }, Str] {
   let complaint = "expected `<name> -> <dests>`, got: " ++ line
   let halves = line.split("->")
-  let left = halves.get(0).ok_or(complaint)?.trim()
-  let dests = halves.get(1).ok_or(complaint)?.split(",").map(fn(dest) { dest.trim() }).reject(fn(dest) { dest == "" })
+  let left = (try halves.get(0).ok_or(complaint)).trim()
+  let dests = (try halves.get(1).ok_or(complaint)).split(",").map(fn(dest) { dest.trim() }).reject(fn(dest) { dest == "" })
   let kind = left.slice(0, 1)
   match left.strip_prefix("%").or_else(fn() { left.strip_prefix("&") }) {
     Some(name) => Ok({ key: name, value: { dests:, kind: } })
@@ -43,7 +43,7 @@ fn parse_module(line: Str) -> Result[{ key: Str, value: Module }, Str] {
 }
 
 fn parse_machine(lines: List[Str]) -> Result[Map[Str, Module], Str] {
-  Ok(Map.from_list(lines.try_map(parse_module)?))
+  Ok(Map.from_list(try lines.try_map(parse_module)))
 }
 
 /// A conjunction starts out remembering a low pulse from every input, so its
@@ -123,10 +123,10 @@ fn press(modules: Map[Str, Module], carried: Counted) -> Counted {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let modules = parse_machine(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }))?
+  let modules = try parse_machine((try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line.trim() == "" }))
   let presses = match sys.args.get(1) {
     None => 1000
-    Some(raw) => Int.parse(raw)?
+    Some(raw) => try Int.parse(raw)
   }
   let { high:, low: } = List.range(0, presses).fold({ high: 0, low: 0, machine: initial(modules) }, fn(carried, index) {
     press(modules, carried)

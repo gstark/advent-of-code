@@ -62,8 +62,8 @@ fn summarise(rows: List[Str], wanted: Int) -> Result[Int, Str] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let patterns = Fs.read_text(sys.fs.read, path)?.trim().split("\n\n").map(parse_pattern)
-  let total = patterns.try_map(fn(rows) { summarise(rows, 0) })?.sum()
+  let patterns = (try Fs.read_text(sys.fs.read, path)).trim().split("\n\n").map(parse_pattern)
+  let total = (try patterns.try_map(fn(rows) { summarise(rows, 0) })).sum()
   sys.console.print("patterns: " ++ Int.to_str(patterns.len()))
   sys.console.print("summary: " ++ Int.to_str(total))
   Ok(())

@@ -86,16 +86,16 @@ fn walk(grid: List[Str], start: Point, from: Point, at: Point, carried: Trace) -
     Ok(stepped)
   } else {
     let onward = exits(tile(grid, at), at).reject(fn(next) { next == from })
-    walk(grid, start, at, onward.first().ok_or("the loop runs into a dead end")?, stepped)
+    walk(grid, start, at, try onward.first().ok_or("the loop runs into a dead end"), stepped)
   }
 }
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let grid = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" })
-  let start = find_start(grid)?
-  let first = loop_end(grid, start).ok_or("the start tile connects to nothing")?
-  let { boundary:, doubled: } = walk(grid, start, start, first, { boundary: 0, doubled: 0 })?
+  let grid = (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" })
+  let start = try find_start(grid)
+  let first = try loop_end(grid, start).ok_or("the start tile connects to nothing")
+  let { boundary:, doubled: } = try walk(grid, start, start, first, { boundary: 0, doubled: 0 })
   let area = Int.abs(doubled) / 2
   sys.console.print("loop length: " ++ Int.to_str(boundary))
   sys.console.print("enclosed tiles: " ++ Int.to_str(area - boundary / 2 + 1))

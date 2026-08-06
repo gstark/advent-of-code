@@ -219,12 +219,12 @@ fn entries(grid: Grid) -> List[Beam] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let grid = Grid.of(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" }))
+  let grid = Grid.of((try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" }))
   let starts = entries(grid)
   let blank_lit = flag_grid(grid.height, grid.width)
   let blank_seen = flag_grid(grid.height, grid.width * 4)
   let best = starts.map(fn(start) { energised(grid, start, blank_lit, blank_seen) }).max()
   sys.console.print("entries tried: " ++ Int.to_str(starts.len()))
-  sys.console.print("best energised tiles: " ++ Int.to_str(best.ok_or("no entry points")?))
+  sys.console.print("best energised tiles: " ++ Int.to_str(try best.ok_or("no entry points")))
   Ok(())
 }

@@ -144,10 +144,10 @@ fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
   let steps = match sys.args.get(1) {
     None => 26501365
-    Some(raw) => Int.parse(raw)?
+    Some(raw) => try Int.parse(raw)
   }
-  let grid = Grid.of(Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" }))
-  let start = start_of(grid)?
+  let grid = Grid.of((try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" }))
+  let start = try start_of(grid)
   let half = grid.width / 2
   if steps <= 10000 {
     sys.console.print("plots reachable in exactly " ++ Int.to_str(steps) ++ " steps: "

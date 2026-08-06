@@ -76,10 +76,10 @@ fn find_loop(rows: List[Str], marks: Map[Str, Int], seen: List[List[Str]], step:
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let grid = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" })
+  let grid = (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" })
   let target = match sys.args.get(1) {
     None => 1000000000
-    Some(raw) => Int.parse(raw)?
+    Some(raw) => try Int.parse(raw)
   }
   let { length:, seen:, start: } = find_loop(grid, Map.empty(), [], 0)
   let landing = start + (target - start) % length

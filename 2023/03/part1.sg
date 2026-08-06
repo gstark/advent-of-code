@@ -92,7 +92,7 @@ fn ring(found: Num) -> List[Int] {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let lines = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line == "" })
+  let lines = (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line == "" })
   let cells = symbol_cells(lines)
   let parts = numbers(lines).filter(fn(found) { ring(found).any(fn(at) { Map.has(cells, at) }) })
   sys.console.print("sum of part numbers: " ++ Int.to_str(parts.map(fn(found) { found.value }).sum()))

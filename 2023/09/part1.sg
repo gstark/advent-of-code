@@ -36,7 +36,7 @@ fn predict(values: List[Int]) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let histories = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }).try_map(parse_history)?
+  let histories = try (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line.trim() == "" }).try_map(parse_history)
   sys.console.print("sum of next values: " ++ Int.to_str(histories.map(predict).sum()))
   Ok(())
 }

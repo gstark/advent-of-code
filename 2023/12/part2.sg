@@ -30,11 +30,11 @@ type Record = { groups: List[Int], springs: List[Str] }
 
 fn parse_record(line: Str) -> Result[Record, Str] {
   let parts = line.words()
-  let springs = parts.get(0).ok_or("expected `<springs> <groups>`, got: " ++ line)?
-  let groups = parts.get(1).ok_or("expected `<springs> <groups>`, got: " ++ line)?
+  let springs = try parts.get(0).ok_or("expected `<springs> <groups>`, got: " ++ line)
+  let groups = try parts.get(1).ok_or("expected `<springs> <groups>`, got: " ++ line)
   let five = List.range(0, 5)
   Ok({
-    groups: five.flat_map(fn(copy) { groups.split(",") }).try_map(Int.parse)?,
+    groups: try five.flat_map(fn(copy) { groups.split(",") }).try_map(Int.parse),
     springs: five.map(fn(copy) { springs }).join("?").chars(),
   })
 }
@@ -96,7 +96,7 @@ fn arrangements(record: Record) -> Int {
 
 fn main(sys: Sys) -> Result[Unit, Str] {
   let path = sys.args.first().unwrap_or("input.txt")
-  let records = Fs.read_lines(sys.fs.read, path)?.reject(fn(line) { line.trim() == "" }).try_map(parse_record)?
+  let records = try (try Fs.read_lines(sys.fs.read, path)).reject(fn(line) { line.trim() == "" }).try_map(parse_record)
   sys.console.print("sum of arrangements: " ++ Int.to_str(records.map(arrangements).sum()))
   Ok(())
 }
